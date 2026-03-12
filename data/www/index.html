@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Physys Lab v6.1</title>
+    <meta name="description" content="Physys Measurement System — Laboratorio de Física Portátil">
+    <meta name="theme-color" content="#0a0e1a">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo-circle pulse"></div>
+                <div class="title-block">
+                    <h1>Physys Lab <span class="v-tag">v6.1</span></h1>
+                    <span class="subtitle" id="sys-status">Conectando...</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button id="btn-record" class="btn-action btn-rec"><span class="dot"></span> Grabar</button>
+                <button id="btn-export" class="btn-action btn-gold">Exportar JSON</button>
+                <button id="btn-save" class="btn-action btn-teal" title="Interruptor Modo Ahorro">⚡</button>
+            </div>
+        </header>
+
+        <!-- TABS -->
+        <nav class="tabs-nav">
+            <button class="tab-btn active" data-tab="movimiento">
+                <span class="tab-icon">📏</span> Movimiento
+            </button>
+            <button class="tab-btn" data-tab="rotacion">
+                <span class="tab-icon">🔄</span> Rotación
+            </button>
+            <button class="tab-btn" data-tab="fuerza">
+                <span class="tab-icon">⚖️</span> Fuerza
+            </button>
+            <button class="tab-btn" data-tab="python">
+                <span class="tab-icon">🐍</span> Editor Python
+            </button>
+            <button class="tab-btn" data-tab="gpioview">
+                <span class="tab-icon">📌</span> GPIO Viewer
+            </button>
+        </nav>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-layout">
+            <!-- DATA CENTER -->
+            <section class="data-center">
+                <!-- HERO CARD -->
+                <div class="hero-card glass-card">
+                    <div class="display-header">
+                        <h2 class="display-title" id="display-title">Cinemática Lineal</h2>
+                        <select id="graph-variable" class="select-premium">
+                            <!-- Options change per tab -->
+                        </select>
+                    </div>
+
+                    <div class="hero-value">
+                        <span id="main-val" class="neon-text">---</span>
+                        <small id="main-unit" class="unit-label">mm</small>
+                    </div>
+
+                    <div class="sub-metrics" id="sub-metrics">
+                        <div class="metric-pill">
+                            <span class="pill-label" id="sub-label-1">Rapidez</span>
+                            <span class="pill-val" id="sub-val-1">0.00 <small>m/s</small></span>
+                        </div>
+                        <div class="metric-pill">
+                            <span class="pill-label" id="sub-label-2">Aceleración</span>
+                            <span class="pill-val" id="sub-val-2">0.00 <small>m/s²</small></span>
+                        </div>
+                    </div>
+
+                    <div class="graph-wrapper">
+                        <canvas id="realtimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- EXPERIMENT INFO -->
+                <div class="info-row">
+                    <div class="info-card glass-card">
+                        <h3>Almacenamiento</h3>
+                        <div class="storage-bar"><div class="bar-fill" id="storage-fill"></div></div>
+                        <p class="storage-text" id="storage-text">Cargando...</p>
+                    </div>
+                    <div class="info-card glass-card">
+                        <h3>Sistema</h3>
+                        <p class="sys-info"><span id="heap-info">--</span> RAM libre</p>
+                        <p class="sys-info"><span id="psram-info">--</span> PSRAM libre</p>
+                        <p class="sys-info">Uptime: <span id="uptime-info">--</span>s</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SIDEBAR: GPIO Monitor -->
+            <aside class="hardware-panel">
+                <div class="gpio-card glass-card">
+                    <h3>Monitor GPIO <small>(Freenove Ref)</small></h3>
+                    <div class="esp32-diagram">
+                        <div class="esp-body">
+                            <span class="esp-chip-label">ESP32-S3<br>WROOM-1</span>
+                            <div class="pins-col pins-left">
+                                <div class="p-node i2c" data-gpio="4"><span class="pin-num">4</span> SDA</div>
+                                <div class="p-node i2c" data-gpio="5"><span class="pin-num">5</span> SCL</div>
+                                <div class="p-node serial" data-gpio="6"><span class="pin-num">6</span> HX-DT</div>
+                                <div class="p-node serial" data-gpio="7"><span class="pin-num">7</span> HX-SCK</div>
+                            </div>
+                            <div class="pins-col pins-right">
+                                <div class="p-node led" data-gpio="48"><span class="pin-num">48</span> WS2812</div>
+                                <div class="p-node boot-pin" data-gpio="0"><span class="pin-num">0</span> BOOT</div>
+                                <div class="p-node power">3V3</div>
+                                <div class="p-node gnd">GND</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sensor-badges">
+                        <span class="badge" id="badge-tof">ToF ●</span>
+                        <span class="badge" id="badge-enc">Encoder ●</span>
+                        <span class="badge" id="badge-hx">HX711 ●</span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- PYTHON EDITOR PANEL (hidden by default) -->
+        <section class="python-panel" id="python-panel" style="display:none;">
+            <div class="editor-card glass-card">
+                <div class="editor-header">
+                    <h2 class="display-title">🐍 Editor de Lógica Python</h2>
+                    <div class="editor-controls">
+                        <select id="example-select" class="select-premium">
+                            <option value="">— Cargar ejemplo —</option>
+                            <option value="tof">📏 Cinemática ToF</option>
+                            <option value="encoder">🔄 Encoder Rotación</option>
+                            <option value="loadcell">⚖️ Celda de Carga</option>
+                        </select>
+                        <button id="btn-load-script" class="btn-action btn-teal">📂 Cargar actual</button>
+                        <button id="btn-save-script" class="btn-action btn-rec">💾 Guardar en ESP32</button>
+                    </div>
+                </div>
+                <div class="editor-body">
+                    <div class="line-numbers" id="line-nums"></div>
+                    <textarea id="python-editor" spellcheck="false" placeholder="# Escribe tu lógica de sensor aquí...
+# Este script se ejecuta en el Physys Lab.
+# Variables disponibles: dist, vel, acc, angleDeg, angleRad, angVel, angAcc, weight, mass, weightN"></textarea>
+                </div>
+                <div class="editor-footer">
+                    <span class="editor-status" id="editor-status">Listo</span>
+                    <span class="editor-info" id="editor-info">0 bytes</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- GPIO VIEWER PANEL (hidden by default) -->
+        <section class="gpio-viewer-panel" id="gpio-viewer-panel" style="display:none;">
+            <div class="gv-card glass-card">
+                <div class="gv-header">
+                    <h2 class="display-title">📌 GPIO Viewer — ESP32-S3 WROOM-1</h2>
+                    <div class="gv-controls">
+                        <span class="gv-refresh-label">Refresco:</span>
+                        <select id="gv-rate" class="select-premium">
+                            <option value="500">500ms</option>
+                            <option value="1000" selected>1s</option>
+                            <option value="2000">2s</option>
+                        </select>
+                        <span class="gv-timestamp" id="gv-timestamp">--</span>
+                    </div>
+                </div>
+                <div class="gv-board">
+                    <div class="gv-col gv-left" id="gv-left-pins"></div>
+                    <div class="gv-chip">
+                        <div class="gv-chip-inner">
+                            <span class="gv-chip-name">ESP32-S3</span>
+                            <span class="gv-chip-sub">WROOM-1</span>
+                            <span class="gv-chip-sub2">N16R8</span>
+                        </div>
+                    </div>
+                    <div class="gv-col gv-right" id="gv-right-pins"></div>
+                </div>
+                <div class="gv-legend">
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-i2c"></span> I2C</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-serial"></span> HX711</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-uart"></span> UART</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-usb"></span> USB</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-led"></span> LED</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-boot"></span> BOOT</span>
+                    <span class="gv-leg-item"><span class="gv-dot gv-fn-gpio"></span> Free GPIO</span>
+                    <span class="gv-leg-item"><span class="gv-sq gv-high"></span> HIGH</span>
+                    <span class="gv-leg-item"><span class="gv-sq gv-low"></span> LOW</span>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(() => {
+                console.log('[SW] Service Worker registrado');
+            });
+        }
+    </script>
+</body>
+</html>

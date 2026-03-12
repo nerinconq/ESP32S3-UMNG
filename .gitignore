@@ -1,0 +1,21 @@
+# PlatformIO
+.pio/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.log
+*.bin
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Gemini/Agent
+.gemini/
+.agents/
+.mcp/
