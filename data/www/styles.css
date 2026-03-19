@@ -611,6 +611,47 @@ body {
     color: var(--text-muted);
 }
 
+/* ─── Sync Badge (H5) ─── */
+.sync-badge {
+    font-size: 0.72rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    transition: all 0.4s;
+    white-space: nowrap;
+}
+.sync-badge.synced {
+    color: var(--accent-teal);
+    border-color: rgba(20, 240, 197, 0.3);
+    background: rgba(20, 240, 197, 0.08);
+}
+.sync-badge.pending {
+    color: var(--accent-gold);
+    border-color: rgba(240, 180, 41, 0.3);
+    background: rgba(240, 180, 41, 0.08);
+    animation: sync-pulse 2s ease infinite;
+}
+.sync-badge.syncing {
+    color: var(--accent-cyan);
+    border-color: rgba(0, 212, 255, 0.3);
+    background: rgba(0, 212, 255, 0.08);
+    animation: sync-spin 1s linear infinite;
+}
+.sync-badge.offline {
+    color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+@keyframes sync-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+@keyframes sync-spin {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 /* ─── Animations ─── */
 @keyframes fade-in {
     from { opacity: 0; transform: translateY(8px); }

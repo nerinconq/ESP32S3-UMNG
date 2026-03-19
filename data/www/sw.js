@@ -1,11 +1,12 @@
 /* Physys Lab — Service Worker (Offline First) */
 
-const CACHE_NAME = 'physys-v6.1';
+const CACHE_NAME = 'physys-v6.2';
 const CACHE_FILES = [
     '/',
     '/index.html',
     '/styles.css',
     '/app.js',
+    '/firebase-sync.js',
     '/manifest.json'
 ];
 

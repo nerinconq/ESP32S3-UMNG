@@ -1,0 +1,14 @@
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(21, OUTPUT); // RGB LED or similar on S3
+}
+
+void loop() {
+  Serial.println("System Alive...");
+  digitalWrite(21, HIGH);
+  delay(500);
+  digitalWrite(21, LOW);
+  delay(500);
+}

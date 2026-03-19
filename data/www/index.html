@@ -21,6 +21,7 @@
                 </div>
             </div>
             <div class="header-right">
+                <span id="sync-badge" class="sync-badge offline">☁️ Offline</span>
                 <button id="btn-record" class="btn-action btn-rec"><span class="dot"></span> Grabar</button>
                 <button id="btn-export" class="btn-action btn-gold">Exportar JSON</button>
                 <button id="btn-save" class="btn-action btn-teal" title="Interruptor Modo Ahorro">⚡</button>
@@ -196,6 +197,7 @@
         </section>
     </div>
 
+    <script src="firebase-sync.js"></script>
     <script src="app.js"></script>
     <script>
         if ('serviceWorker' in navigator) {

@@ -349,6 +349,13 @@ function exportJSON() {
           .then(r => console.log('[Export] Guardado en ESP32:', r.file))
           .catch(e => console.warn('[Export] No se pudo guardar en ESP32:', e));
     }
+
+    // Save to IndexedDB for Firebase cloud sync (H5)
+    if (typeof saveToIndexedDB === 'function') {
+        saveToIndexedDB(exportData)
+            .then(id => console.log('[Sync] Cached for cloud sync:', id))
+            .catch(e => console.warn('[Sync] IndexedDB error:', e));
+    }
 }
 
 // ─── Low Power Mode ───
@@ -704,6 +711,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         })
         .catch(() => {});
+
+    // Init Firebase Sync module (H5)
+    if (typeof initFirebaseSync === 'function') {
+        initFirebaseSync();
+    }
 
     // Redraw chart on resize
     window.addEventListener('resize', drawChart);
