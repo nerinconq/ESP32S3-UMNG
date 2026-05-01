@@ -1,12 +1,14 @@
 /* ═══════════════════════════════════════════════════════
-   Physys Lab v6.1 — App Controller
+   Physys Lab v7.0 — App Controller
    WebSocket Streaming + Canvas Chart + Tab Management
+   Per-sensor controls + Time unit selector
    ═══════════════════════════════════════════════════════ */
 
 // ─── Tab Definitions ───
 const TAB_CONFIG = {
     movimiento: {
         title: 'Cinemática Lineal',
+        sensor: 'TOF',
         variables: [
             { key: 'dist', label: 'Posición', unit: 'mm', color: '#00d4ff' },
             { key: 'vel', label: 'Rapidez', unit: 'm/s', color: '#14f0c5' },
@@ -19,6 +21,7 @@ const TAB_CONFIG = {
     },
     rotacion: {
         title: 'Cinemática Angular',
+        sensor: 'ENC',
         variables: [
             { key: 'angleDeg', label: 'Ángulo (°)', unit: '°', color: '#00d4ff' },
             { key: 'angleRad', label: 'Ángulo (rad)', unit: 'rad', color: '#00d4ff' },
@@ -32,6 +35,7 @@ const TAB_CONFIG = {
     },
     fuerza: {
         title: 'Dinámica',
+        sensor: 'HX',
         variables: [
             { key: 'weight', label: 'Masa (g)', unit: 'g', color: '#f0b429' },
             { key: 'mass', label: 'Masa (kg)', unit: 'kg', color: '#f0b429' },
@@ -43,6 +47,23 @@ const TAB_CONFIG = {
         ]
     }
 };
+
+// ─── Per-sensor recording state ───
+const sensorRecording = { TOF: false, ENC: false, HX: false };
+const sensorData = { TOF: [], ENC: [], HX: [] };
+
+// ─── Time unit ───
+let timeUnit = 'ms'; // 'ms', 's', 'min'
+function convertTime(ms) {
+    if (timeUnit === 's') return ms / 1000;
+    if (timeUnit === 'min') return ms / 60000;
+    return ms;
+}
+function timeUnitLabel() {
+    if (timeUnit === 's') return 's';
+    if (timeUnit === 'min') return 'min';
+    return 'ms';
+}
 
 // ─── State ───
 let currentTab = 'movimiento';
@@ -84,6 +105,12 @@ function connectWS() {
         try {
             const data = JSON.parse(evt.data);
             lastData = data;
+
+            // Per-sensor recording
+            if (sensorRecording.TOF) sensorData.TOF.push({ ...data, recorded: Date.now() });
+            if (sensorRecording.ENC) sensorData.ENC.push({ ...data, recorded: Date.now() });
+            if (sensorRecording.HX)  sensorData.HX.push({ ...data, recorded: Date.now() });
+            updateSensorCount();
 
             if (isRecording) {
                 recordedData.push({ ...data, recorded: Date.now() });
@@ -249,7 +276,7 @@ function drawChart() {
     ctx.fillStyle = '#4a5568';
     ctx.font = '10px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText('Tiempo →', w / 2, h - 4);
+    ctx.fillText('Tiempo (' + timeUnitLabel() + ') →', w / 2, h - 4);
 }
 
 // ─── Tab Switching ───
@@ -276,86 +303,153 @@ function switchTab(tabName) {
     });
     selectedVariable = tabConf.variables[0].key;
 
+    // Sync sensor toolbar with current tab
+    const sensor = tabConf.sensor;
+    const btn = $('btn-sensor-rec');
+    if (btn) {
+        if (sensorRecording[sensor]) {
+            btn.classList.add('recording');
+            btn.innerHTML = '<span class="dot"></span> ⏹ Detener';
+        } else {
+            btn.classList.remove('recording');
+            btn.innerHTML = '<span class="dot"></span> ▶️ Medir';
+        }
+    }
+    // Show tare only for force tab
+    const tareBtn = $('btn-sensor-tare');
+    if (tareBtn) tareBtn.style.display = (tabName === 'fuerza') ? '' : 'none';
+    // Update sample count
+    updateSensorCount();
+
     // Update display with last data if available
     if (Object.keys(lastData).length > 0) {
         updateDisplay(lastData);
     }
 }
 
-// ─── Recording ───
+function updateSensorCount() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const el = $('sensor-count');
+    if (!el || !tabConf || !tabConf.sensor) return;
+    const n = sensorData[tabConf.sensor].length;
+    el.textContent = n + ' muestras';
+}
+
+// ─── Per-sensor Recording ───
+function toggleSensorRecording() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return toggleRecording();
+    const sensor = tabConf.sensor;
+    sensorRecording[sensor] = !sensorRecording[sensor];
+    const btn = $('btn-sensor-rec');
+    if (sensorRecording[sensor]) {
+        sensorData[sensor] = [];
+        btn.classList.add('recording');
+        btn.innerHTML = '<span class="dot"></span> ⏹ Detener';
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('START_' + sensor);
+    } else {
+        btn.classList.remove('recording');
+        btn.innerHTML = '<span class="dot"></span> ▶️ Medir';
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP_' + sensor);
+    }
+}
+
+// ─── Global Recording (header) ───
 function toggleRecording() {
     isRecording = !isRecording;
     const btn = $('btn-record');
-
     if (isRecording) {
         recordedData = [];
         btn.classList.add('recording');
         btn.innerHTML = '<span class="dot"></span> Grabando...';
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send('START');
-        }
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('START');
     } else {
         btn.classList.remove('recording');
         btn.innerHTML = '<span class="dot"></span> Grabar';
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send('STOP');
-        }
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP');
     }
 }
 
-// ─── Export JSON (bitácora-UMNG compatible) ───
+// ─── Tare (per tab) ───
+function tareSensor() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TARE');
+        const btn = $('btn-sensor-tare');
+        if (btn) { btn.textContent = '✓ Tarado'; setTimeout(() => { btn.textContent = '⚖️ Tara'; }, 2000); }
+    }
+}
+
+// ─── Export per sensor ───
+function exportSensorData() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return exportJSON();
+    const sensor = tabConf.sensor;
+    const data = sensorData[sensor];
+    if (!data || data.length === 0) { alert('No hay datos grabados para ' + tabConf.title); return; }
+    const exportData = {
+        device: 'Physys-Lab', version: 'v7.0', sensor: sensor,
+        tab: currentTab, title: tabConf.title,
+        exported: new Date().toISOString(),
+        timeUnit: timeUnit,
+        duration_ms: data.length > 1 ? data[data.length - 1].t - data[0].t : 0,
+        samples: data.length,
+        data: data.map(d => {
+            const row = { t: convertTime(d.t) };
+            tabConf.variables.forEach(v => { row[v.key] = d[v.key]; });
+            return row;
+        })
+    };
+    downloadJSON(exportData, 'physys_' + sensor + '_' + Date.now() + '.json');
+    // Save to ESP32
+    fetch('/api/data', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(exportData) })
+        .then(r => r.json()).catch(() => {});
+    if (typeof saveToIndexedDB === 'function') saveToIndexedDB(exportData).catch(() => {});
+}
+
+// ─── Export All (header button) ───
 function exportJSON() {
     const exportData = {
-        device: 'Physys-Lab',
-        version: 'v6.1',
-        exported: new Date().toISOString(),
-        duration_ms: recordedData.length > 1
-            ? recordedData[recordedData.length - 1].t - recordedData[0].t
-            : 0,
+        device: 'Physys-Lab', version: 'v7.0',
+        exported: new Date().toISOString(), timeUnit: timeUnit,
+        duration_ms: recordedData.length > 1 ? recordedData[recordedData.length-1].t - recordedData[0].t : 0,
         samples: recordedData.length,
-        data: recordedData.map(d => ({
-            t: d.t,
-            // Cinemática lineal
-            dist: d.dist,
-            vel: d.vel,
-            acc: d.acc,
-            // Cinemática angular
-            angleDeg: d.angleDeg,
-            angleRad: d.angleRad,
-            angVel: d.angVel,
-            angAcc: d.angAcc,
-            // Dinámica
-            weight: d.weight,
-            mass: d.mass,
-            weightN: d.weightN
-        }))
+        data: recordedData.map(d => ({ t: convertTime(d.t), dist:d.dist, vel:d.vel, acc:d.acc,
+            angleDeg:d.angleDeg, angleRad:d.angleRad, angVel:d.angVel, angAcc:d.angAcc,
+            weight:d.weight, mass:d.mass, weightN:d.weightN }))
     };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'physys_' + Date.now() + '.json';
-    a.click();
-    URL.revokeObjectURL(url);
-
-    // Also save to ESP32 data partition
+    downloadJSON(exportData, 'physys_' + Date.now() + '.json');
     if (recordedData.length > 0) {
-        fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(exportData)
-        }).then(res => res.json())
-          .then(r => console.log('[Export] Guardado en ESP32:', r.file))
-          .catch(e => console.warn('[Export] No se pudo guardar en ESP32:', e));
+        fetch('/api/data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(exportData) })
+            .then(r=>r.json()).catch(()=>{});
     }
+    if (typeof saveToIndexedDB === 'function') saveToIndexedDB(exportData).catch(()=>{});
+}
 
-    // Save to IndexedDB for Firebase cloud sync (H5)
-    if (typeof saveToIndexedDB === 'function') {
-        saveToIndexedDB(exportData)
-            .then(id => console.log('[Sync] Cached for cloud sync:', id))
-            .catch(e => console.warn('[Sync] IndexedDB error:', e));
-    }
+function downloadJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ─── Clear sensor data ───
+function clearSensorData() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return;
+    const sensor = tabConf.sensor;
+    if (!confirm('¿Limpiar ' + sensorData[sensor].length + ' muestras de ' + tabConf.title + '?')) return;
+    sensorData[sensor] = [];
+    chartData = [];
+    drawChart();
+}
+
+// ─── Clear ESP32 memory ───
+function clearESP32Data() {
+    if (!confirm('¿Borrar TODOS los datos del ESP32? Los datos se perderán permanentemente.')) return;
+    fetch('/api/data/clear', { method: 'DELETE' })
+        .then(r => r.json())
+        .then(d => { alert('✓ ' + d.deleted + ' archivos eliminados. Memoria libre: ' + (d.free/1024).toFixed(0) + ' KB'); fetchSystemInfo(); })
+        .catch(e => alert('Error: ' + e.message));
 }
 
 // ─── Low Power Mode ───

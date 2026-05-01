@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   Physys Lab v6.1 — Gemini v6 Dark Mode Aesthetic
-   ESP32-S3 WROOM-1 | Offline-First PWA
+   Physys Lab v7.0 — Gemini v7 Dark Mode Aesthetic
+   ESP32-S3 WROOM-1 | Offline-First PWA | Dual I2C
    ═══════════════════════════════════════════════════════ */
 
 /* ─── System Font (No CDN) ─── */
@@ -172,6 +172,37 @@ body {
     border: 1px solid rgba(20, 240, 197, 0.25);
 }
 .btn-action:active { transform: scale(0.95); }
+.btn-warn {
+    background: rgba(255, 77, 106, 0.08);
+    color: #ff8899;
+    border: 1px solid rgba(255, 77, 106, 0.2);
+}
+.btn-warn:hover {
+    background: rgba(255, 77, 106, 0.18);
+}
+
+/* ─── Sensor Toolbar ─── */
+.sensor-toolbar {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0.5rem 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.sensor-toolbar .btn-action {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.72rem;
+}
+.sensor-count {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
 
 /* ─── Tabs ─── */
 .tabs-nav {

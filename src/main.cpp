@@ -25,8 +25,12 @@
 // ═══════════════════════════════════════════════════════════════
 // PINOUT (Freenove ESP32-S3 WROOM Reference)
 // ═══════════════════════════════════════════════════════════════
-#define I2C_SDA        4    // GPIO4 — Bus I2C compartido (VL53L0X + AS5600)
-#define I2C_SCL        5    // GPIO5
+// Bus I2C #0 — ToF VL53L0X (dirección 0x29)
+#define TOF_SDA        4    // GPIO4
+#define TOF_SCL        5    // GPIO5
+// Bus I2C #1 — AS5600 Encoder (dirección 0x36)
+#define ENC_SDA        10   // GPIO10
+#define ENC_SCL        11   // GPIO11
 #define HX711_DT       6    // GPIO6 — Celda de carga
 #define HX711_SCK      7    // GPIO7
 #define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove)
@@ -40,8 +44,11 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 DNSServer dnsServer;
 
+TwoWire I2C_TOF = TwoWire(0);  // Bus 0 para ToF
+TwoWire I2C_ENC = TwoWire(1);  // Bus 1 para Encoder
+
 VL53L0X tofSensor;
-AS5600 encoder;
+AS5600 encoder(&I2C_ENC);  // AS5600 en Bus 1
 HX711 loadCell;
 CRGB leds[NUM_LEDS];
 
@@ -52,11 +59,20 @@ fs::LittleFSFS SystemFS;
 fs::LittleFSFS DataFS;
 
 // Estado del sistema
+// Control de medición por sensor
+struct SensorMeasure {
+  bool active = false;
+  unsigned long startTime = 0;
+};
+
 struct SystemState {
   bool tofReady = false;
   bool encoderReady = false;
   bool loadCellReady = false;
-  bool measuring = false;
+  bool measuring = false;       // compatibilidad global
+  SensorMeasure tofMeasure;
+  SensorMeasure encMeasure;
+  SensorMeasure hxMeasure;
   // Cinemática Lineal (VL53L0X)
   float lastDistance = 0;       // mm
   float lastVelocity = 0;       // m/s
@@ -74,6 +90,9 @@ struct SystemState {
   float lastWeight = 0;         // gramos
   unsigned long lastSampleTime = 0;
 } state;
+
+// Forward declarations
+void checkGlobalStop();
 
 // ═══════════════════════════════════════════════════════════════
 // SEMÁFORO LED (RMT via FastLED)
@@ -96,35 +115,39 @@ void blinkLED(CRGB color, int times, int delayMs) {
 // INICIALIZACIÓN DE SENSORES
 // ═══════════════════════════════════════════════════════════════
 void initSensors() {
-  Wire.begin(I2C_SDA, I2C_SCL);
-  Wire.setClock(400000); // 400kHz Fast I2C
+  // Bus I2C #0 — ToF VL53L0X
+  I2C_TOF.begin(TOF_SDA, TOF_SCL);
+  I2C_TOF.setClock(400000);
 
-  // VL53L0X (ToF — Cinemática)
+  // VL53L0X (ToF — Cinemática) en Bus 0
+  tofSensor.setBus(&I2C_TOF);
   tofSensor.setTimeout(500);
   if (tofSensor.init()) {
-    tofSensor.startContinuous(50); // Lectura cada 50ms
+    tofSensor.startContinuous(50);
     state.tofReady = true;
-    Serial.println("[OK] VL53L0X (ToF) inicializado en 0x29");
+    Serial.println("[OK] VL53L0X (ToF) en Bus0 GPIO4/5 → 0x29");
   } else {
-    Serial.println("[WARN] VL53L0X no encontrado");
+    Serial.println("[WARN] VL53L0X no encontrado en Bus0");
   }
 
-  // AS5600 (Encoder Magnético — Rotación)
-  encoder.begin(4); // dirección por defecto
+  // AS5600 (Encoder Magnético) en Bus 1
+  I2C_ENC.begin(ENC_SDA, ENC_SCL);
+  I2C_ENC.setClock(400000);
+  encoder.begin(255); // Control manual de DIR
   if (encoder.isConnected()) {
     state.encoderReady = true;
-    Serial.println("[OK] AS5600 (Encoder) inicializado en 0x36");
+    Serial.println("[OK] AS5600 (Encoder) en Bus1 GPIO10/11 → 0x36");
   } else {
-    Serial.println("[WARN] AS5600 no encontrado");
+    Serial.println("[WARN] AS5600 no encontrado en Bus1");
   }
 
   // HX711 (Celda de Carga — Fuerza/Peso)
   loadCell.begin(HX711_DT, HX711_SCK);
   if (loadCell.is_ready()) {
-    loadCell.set_scale(420.0); // Calibrar según celda real
+    loadCell.set_scale(420.0);
     loadCell.tare();
     state.loadCellReady = true;
-    Serial.println("[OK] HX711 (Celda de Carga) inicializado");
+    Serial.println("[OK] HX711 (Celda de Carga) GPIO6/7");
   } else {
     Serial.println("[WARN] HX711 no encontrado");
   }
@@ -187,24 +210,47 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   } else if (type == WS_EVT_DISCONNECT) {
     Serial.printf("[WS] Cliente #%u desconectado\n", client->id());
   } else if (type == WS_EVT_DATA) {
-    // Recibir comandos del cliente (ej: "START", "STOP", "TARE")
     String msg = String((char*)data).substring(0, len);
+    // Comandos globales (compatibilidad)
     if (msg == "START") {
       state.measuring = true;
+      state.tofMeasure.active = true;
+      state.encMeasure.active = true;
+      state.hxMeasure.active = true;
       setLED(CRGB::Blue);
-      Serial.println("[CMD] Medición iniciada");
+      Serial.println("[CMD] Medición global iniciada");
     } else if (msg == "STOP") {
       state.measuring = false;
+      state.tofMeasure.active = false;
+      state.encMeasure.active = false;
+      state.hxMeasure.active = false;
       setLED(CRGB::White);
-      blinkLED(CRGB::Green, 3, 150); // 3 destellos verdes = guardado
+      blinkLED(CRGB::Green, 3, 150);
       setLED(CRGB::White);
-      Serial.println("[CMD] Medición detenida");
-    } else if (msg == "TARE") {
+      Serial.println("[CMD] Medición global detenida");
+    }
+    // Comandos por sensor
+    else if (msg == "START_TOF") { state.tofMeasure.active = true; state.measuring = true; setLED(CRGB::Blue); }
+    else if (msg == "STOP_TOF")  { state.tofMeasure.active = false; checkGlobalStop(); }
+    else if (msg == "START_ENC") { state.encMeasure.active = true; state.measuring = true; setLED(CRGB::Blue); }
+    else if (msg == "STOP_ENC")  { state.encMeasure.active = false; checkGlobalStop(); }
+    else if (msg == "START_HX")  { state.hxMeasure.active = true; state.measuring = true; setLED(CRGB::Blue); }
+    else if (msg == "STOP_HX")   { state.hxMeasure.active = false; checkGlobalStop(); }
+    else if (msg == "TARE") {
       if (state.loadCellReady) {
         loadCell.tare();
         Serial.println("[CMD] Celda de carga tarada");
       }
     }
+  }
+}
+
+void checkGlobalStop() {
+  if (!state.tofMeasure.active && !state.encMeasure.active && !state.hxMeasure.active) {
+    state.measuring = false;
+    setLED(CRGB::White);
+    blinkLED(CRGB::Green, 3, 150);
+    setLED(CRGB::White);
   }
 }
 
@@ -275,14 +321,14 @@ void setupAPI() {
       {1,  "GPIO1",    "gpio"},
       {2,  "GPIO2",    "gpio"},
       {3,  "GPIO3",    "gpio"},
-      {4,  "SDA",      "i2c"},
-      {5,  "SCL",      "i2c"},
+      {4,  "TOF_SDA",  "i2c"},
+      {5,  "TOF_SCL",  "i2c"},
       {6,  "HX_DT",    "serial"},
       {7,  "HX_SCK",   "serial"},
       {8,  "GPIO8",    "gpio"},
       {9,  "GPIO9",    "gpio"},
-      {10, "GPIO10",   "gpio"},
-      {11, "GPIO11",   "gpio"},
+      {10, "ENC_SDA",  "i2c"},
+      {11, "ENC_SCL",  "i2c"},
       {12, "GPIO12",   "gpio"},
       {13, "GPIO13",   "gpio"},
       {14, "GPIO14",   "gpio"},
@@ -364,6 +410,50 @@ void setupAPI() {
     serializeJson(doc, json);
     req->send(200, "application/json", json);
   });
+
+  // Listar archivos de datos con tamaños
+  server.on("/api/data/list", HTTP_GET, [](AsyncWebServerRequest *req) {
+    JsonDocument doc;
+    JsonArray files = doc["files"].to<JsonArray>();
+    File root = DataFS.open("/");
+    File file = root.openNextFile();
+    while (file) {
+      JsonObject f = files.add<JsonObject>();
+      f["name"] = String(file.name());
+      f["size"] = file.size();
+      file = root.openNextFile();
+    }
+    doc["total"] = DataFS.totalBytes();
+    doc["used"] = DataFS.usedBytes();
+    doc["free"] = DataFS.totalBytes() - DataFS.usedBytes();
+    String json;
+    serializeJson(doc, json);
+    req->send(200, "application/json", json);
+  });
+
+  // Limpiar todos los datos del ESP32
+  server.on("/api/data/clear", HTTP_DELETE, [](AsyncWebServerRequest *req) {
+    int count = 0;
+    File root = DataFS.open("/");
+    File file = root.openNextFile();
+    while (file) {
+      String fname = String("/") + file.name();
+      file = root.openNextFile();
+      DataFS.remove(fname);
+      count++;
+    }
+    JsonDocument doc;
+    doc["ok"] = true;
+    doc["deleted"] = count;
+    doc["free"] = DataFS.totalBytes() - DataFS.usedBytes();
+    String json;
+    serializeJson(doc, json);
+    req->send(200, "application/json", json);
+    blinkLED(CRGB::Yellow, 2, 200);
+    setLED(CRGB::White);
+    Serial.printf("[DATA] Limpieza: %d archivos eliminados\n", count);
+  });
+
   // Leer script Python actual (GET)
   server.on("/api/python", HTTP_GET, [](AsyncWebServerRequest *req) {
     File f = SystemFS.open("/sensor_logic.py", "r");
