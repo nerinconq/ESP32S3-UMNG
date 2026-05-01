@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhySyS Fuerza - v3 PRO</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f4f4f9; color: #333;}
+    .display { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block; min-width: 250px; }
+    #valor { font-size: 48px; font-weight: bold; color: #d9534f; }
+    .unidad { font-size: 20px; color: #666; font-weight: bold; }
+    .controles { margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;}
+    button, select { padding: 12px 20px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; }
+    button { cursor: pointer; background: #0056b3; color: white; border: none; font-weight: bold; transition: 0.2s;}
+    button:active { background: #003d82; transform: scale(0.95); }
+    canvas { background: white; margin-top: 20px; border-radius: 10px; border: 2px solid #ccc; width: 100%; max-width: 600px; height: 260px; }
+  </style>
+</head>
+<body>
+  <h2>Dinámica e Instrumentación PRO</h2>
+  
+  <div class="display">
+    <div id="valor">0.00</div>
+    <div id="unidadTexto" class="unidad">Gramos (g)</div>
+  </div>
+
+  <div class="controles">
+    <select id="unitSelect">
+      <option value="g">Gramos (g)</option>
+      <option value="kg">Kilogramos (kg)</option>
+      <option value="n">Newtons (N)</option>
+    </select>
+    <button onclick="hacerTara()">Poner a Cero (TARA)</button>
+  </div>
+
+  <canvas id="grafica" width="600" height="260"></canvas>
+
+  <script>
+    const canvas = document.getElementById('grafica'), ctx = canvas.getContext('2d');
+    const unitSelect = document.getElementById('unitSelect');
+    let historico = [];
+
+    function hacerTara() {
+      fetch('/tara').then(() => { 
+        historico = []; 
+      });
+    }
+
+    function dibujar() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(historico.length < 2) return;
+      
+      let t_inicio = historico[0].t;
+      let rangoT = historico[historico.length-1].t - t_inicio || 1;
+      
+      let valoresY = historico.map(p => p.v);
+      let maxY = Math.max(...valoresY);
+      let minY = Math.min(...valoresY);
+      
+      // Auto-escalado dinámico mejorado
+      let margen = (maxY - minY) * 0.1; 
+      if(margen === 0) margen = 0.5; // Margen mínimo si la fuerza es constante
+      maxY += margen; 
+      minY -= margen;
+
+      // Dibujar línea del eje 0 si es visible en pantalla
+      if(minY < 0 && maxY > 0) {
+        let yCero = canvas.height - ((0 - minY)/(maxY - minY)) * canvas.height;
+        ctx.strokeStyle='#ccc'; ctx.setLineDash([5,5]);
+        ctx.beginPath(); ctx.moveTo(0,yCero); ctx.lineTo(canvas.width,yCero); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      
+      ctx.beginPath(); ctx.strokeStyle='#d9534f'; ctx.lineWidth=3; ctx.lineJoin='round';
+      historico.forEach((p, i) => {
+        let x = ((p.t - t_inicio)/rangoT)*canvas.width;
+        let y = canvas.height - ((p.v - minY)/(maxY - minY))*canvas.height;
+        if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+
+    setInterval(() => {
+      fetch('/datos').then(r => r.json()).then(d => {
+        let valorFinal = d.g;
+        let etiqueta = "Gramos (g)";
+
+        if(unitSelect.value === "kg") {
+          valorFinal = d.g / 1000.0;
+          etiqueta = "Kilogramos (kg)";
+        } else if(unitSelect.value === "n") {
+          valorFinal = (d.g / 1000.0) * 9.80665;
+          etiqueta = "Fuerza (N)";
+        }
+
+        document.getElementById('valor').innerText = valorFinal.toFixed(3);
+        document.getElementById('unidadTexto').innerText = etiqueta;
+        
+        historico.push({t: d.t/1000.0, v: valorFinal});
+        if(historico.length > 60) historico.shift();
+        dibujar();
+      }).catch(err => console.log("Reconectando..."));
+    }, 100);
+  </script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhySyS Lab - Dinámica V4</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin: 0; padding: 15px; background: #f0f2f5; color: #2c3e50; }
+    .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+    .tab-btn { padding: 10px 15px; border: 2px solid #3498db; background: white; color: #3498db; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .tab-btn.active { background: #3498db; color: white; }
+    .display { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block; min-width: 280px; margin-bottom: 15px; }
+    #valorP { font-size: 50px; font-weight: bold; color: #e74c3c; }
+    .noise-info { font-size: 14px; color: #7f8c8d; border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 5px; }
+    .controls { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; align-items: center; }
+    button.tara { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    canvas { background: white; border-radius: 8px; border: 1px solid #ccc; width: 100%; max-width: 600px; height: 280px; }
+  </style>
+</head>
+<body>
+  <h2>PhySyS: Laboratorio de Fuerza</h2>
+  <div class="tabs">
+    <button id="mBtn" class="tab-btn active" onclick="setMode('m')">Balanza (Masa)</button>
+    <button id="fBtn" class="tab-btn" onclick="setMode('f')">Dinamómetro (Fuerza)</button>
+  </div>
+  <div class="display">
+    <div id="valorP">0.000</div>
+    <div id="unitTxt" style="font-weight:bold;">Gramos (g)</div>
+    <div class="noise-info">Dato Crudo (Con Ruido): <span id="vRaw">0.00</span></div>
+  </div>
+  <div class="controls">
+    <select id="sUnit"></select>
+    <button class="tara" onclick="fetch('/tara').then(()=>historico=[])">TARA (Cero)</button>
+  </div>
+  <canvas id="grafica" width="600" height="280"></canvas>
+  <script>
+    let mode = 'm', historico = [];
+    const canvas = document.getElementById('grafica'), ctx = canvas.getContext('2d');
+    const units = { m: '<option value="g">Gramos (g)</option><option value="kg">Kilogramos (kg)</option>', f: '<option value="N">Newtons (N)</option><option value="mN">MiliNewtons (mN)</option>' };
+    function setMode(m){ mode = m; document.getElementById('mBtn').className = m=='m'?'tab-btn active':'tab-btn'; document.getElementById('fBtn').className = m=='f'?'tab-btn active':'tab-btn'; document.getElementById('sUnit').innerHTML = units[m]; historico = []; }
+    setMode('m');
+    function dibujar() {
+      ctx.clearRect(0,0,600,280); if(historico.length<2) return;
+      let vy = historico.map(p => p.f), maxY = Math.max(...vy), minY = Math.min(...vy), mrg = (maxY-minY)*0.1 || 1;
+      maxY += mrg; minY -= mrg;
+      // Línea Raw (Naranja Tenue)
+      ctx.beginPath(); ctx.strokeStyle='rgba(230, 126, 34, 0.4)'; ctx.lineWidth=1;
+      historico.forEach((p, i) => { let x = (i/(historico.length-1))*600, y = 280 - ((p.r - minY)/(maxY - minY))*280; if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.stroke();
+      // Línea Filtrada (Roja Fuerte)
+      ctx.beginPath(); ctx.strokeStyle='#e74c3c'; ctx.lineWidth=3;
+      historico.forEach((p, i) => { let x = (i/(historico.length-1))*600, y = 280 - ((p.f - minY)/(maxY - minY))*280; if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.stroke();
+    }
+    setInterval(() => {
+      fetch('/datos').then(r => r.json()).then(d => {
+        let r = d.raw, f = d.filt, u = document.getElementById('sUnit').value, label = "Gramos (g)";
+        if(mode=='m' && u=='kg'){ r/=1000; f/=1000; label="Kilogramos (kg)"; }
+        if(mode=='f'){ let nR = (r/1000)*9.80665, nF = (f/1000)*9.80665; if(u=='mN'){ r=nR*1000; f=nF*1000; label="miliNewtons (mN)"; } else { r=nR; f=nF; label="Newtons (N)"; } }
+        document.getElementById('valorP').innerText = f.toFixed(3);
+        document.getElementById('vRaw').innerText = r.toFixed(3);
+        document.getElementById('unitTxt').innerText = label;
+        historico.push({r, f}); if(historico.length>60) historico.shift(); dibujar();
+      });
+    }, 100);
+  </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhySyS Lab Angular - v3</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
+    h2 { margin-top: 5px; color: #0056b3; font-size: 20px; }
+    .dashboard { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 15px; }
+    .data-box { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 30%; min-width: 90px; margin-bottom: 5px; }
+    .data-box span { display: block; font-size: 20px; font-weight: bold; margin-top: 5px; }
+    canvas { background: white; border: 2px solid #ccc; border-radius: 8px; width: 100%; max-width: 600px; height: 250px; }
+    .ejes { font-size: 12px; color: #666; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Cinemática Angular V3</h2>
+  <div class="dashboard">
+    <div class="data-box">θ (rad) <span id="valP" style="color:#d9534f;">0.000</span></div>
+    <div class="data-box">ω (rad/s) <span id="valV" style="color:#5cb85c;">0.000</span></div>
+    <div class="data-box">α (rad/s²) <span id="valA" style="color:#f0ad4e;">0.000</span></div>
+  </div>
+  
+  <canvas id="grafica" width="600" height="250"></canvas>
+  <div class="ejes">Eje X: Tiempo (s) | Eje Y: Posición Ang. (rad)</div>
+  
+  <script>
+    const canvas = document.getElementById('grafica');
+    const ctx = canvas.getContext('2d');
+    let historico = []; 
+
+    function dibujarGrafica() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if(historico.length < 2) return;
+
+      let t_inicio = historico[0].t;
+      let t_fin = historico[historico.length - 1].t;
+      let rangoT = t_fin - t_inicio;
+      if (rangoT === 0) rangoT = 1;
+
+      let valoresY = historico.map(p => p.a);
+      let maxY = Math.max(...valoresY);
+      let minY = Math.min(...valoresY);
+
+      let margen = (maxY - minY) * 0.1;
+      if(margen === 0) margen = 0.1;
+      maxY += margen;
+      minY -= margen;
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#d9534f'; 
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+
+      for(let i = 0; i < historico.length; i++) {
+        let p = historico[i];
+        let x = ((p.t - t_inicio) / rangoT) * canvas.width;
+        let y = canvas.height - ((p.a - minY) / (maxY - minY)) * canvas.height;
+        if(i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    setInterval(() => {
+      fetch('/datos').then(r => r.json()).then(datos => {
+        document.getElementById('valP').innerText = datos.ang.toFixed(3);
+        document.getElementById('valV').innerText = datos.vel.toFixed(3);
+        document.getElementById('valA').innerText = datos.acel.toFixed(3);
+        
+        let tiempoSegundos = datos.t / 1000.0;
+        historico.push({ t: tiempoSegundos, a: datos.ang });
+        if(historico.length > 50) historico.shift();
+        
+        dibujarGrafica();
+      }).catch(err => console.log("Buscando red..."));
+    }, 100);
+  </script>
+</body>
+</html>

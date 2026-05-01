@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhySyS Lab - Canvas v7</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
+    .header-container { display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto; }
+    h2 { margin-top: 5px; color: #0056b3; font-size: 22px; }
+    #status { font-weight: bold; padding: 5px 10px; border-radius: 5px; background: #ddd; color: #666; font-size: 12px; }
+    
+    .controles { background: #fff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; display: inline-block; }
+    select { font-size: 16px; padding: 8px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; }
+    button.refresh { font-size: 14px; padding: 8px; margin-left: 10px; border-radius: 5px; cursor: pointer; background: #0056b3; color: white; border: none; }
+
+    /* Modificado: centramos el contenido del dashboard */
+    .dashboard { display: flex; justify-content: center; flex-wrap: wrap; margin-bottom: 15px; max-width: 800px; margin-left: auto; margin-right: auto; }
+    
+    /* Modificado: ocultamos las cajas por defecto y las hacemos un poco más anchas */
+    .data-box { 
+      background: white; 
+      padding: 15px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+      width: 40%; 
+      min-width: 150px; 
+      margin-bottom: 5px; 
+      display: none; 
+    }
+    
+    .data-box b { display: block; font-size: 14px; color: #666; text-transform: uppercase; }
+    .data-box span { display: block; font-size: 28px; font-weight: bold; margin-top: 5px; }
+    
+    .val-p { color: #d9534f; } 
+    .val-v { color: #5cb85c; } 
+    .val-a { color: #f0ad4e; } 
+
+    canvas { background: white; border: 2px solid #ddd; border-radius: 10px; width: 100%; max-width: 700px; height: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .debug-box { margin-top: 15px; font-family: monospace; font-size: 12px; color: #333; background: #fff; padding: 10px; border-radius: 5px; border: 1px dashed #ccc; max-width: 700px; margin-left: auto; margin-right: auto; text-align: left; }
+  </style>
+</head>
+<body>
+
+  <div class="header-container">
+    <h2>Plataforma PhySyS (Canvas v7)</h2>
+    <div id="status">Conectando...</div>
+  </div>
+  
+  <div class="controles">
+    <label for="variableSelect"><strong>Variable a Graficar: </strong></label>
+    <select id="variableSelect">
+      <option value="d">Posición (m)</option>
+      <option value="v">Velocidad (m/s)</option>
+      <option value="a">Aceleración (m/s²)</option>
+    </select>
+    <button class="refresh" onclick="location.reload(true)">Limpiar Caché</button>
+  </div>
+
+  <div class="dashboard">
+    <div class="data-box" id="box-d"><b>Posición</b><span id="valP" class="val-p">0.000</span></div>
+    <div class="data-box" id="box-v"><b>Velocidad</b><span id="valV" class="val-v">0.000</span></div>
+    <div class="data-box" id="box-a"><b>Aceleración</b><span id="valA" class="val-a">0.000</span></div>
+  </div>
+  
+  <canvas id="grafica" width="700" height="300"></canvas>
+  
+  <div class="debug-box">
+    <strong>Trama de Datos JSON:</strong><br>
+    <span id="debugLog">Esperando conexión con el ESP32...</span>
+  </div>
+  
+  <script>
+    const canvas = document.getElementById('grafica');
+    const ctx = canvas.getContext('2d');
+    const selectBox = document.getElementById('variableSelect');
+    const statusDiv = document.getElementById('status');
+    const debugLog = document.getElementById('debugLog');
+
+    // Nuevas referencias a las cajas del HTML
+    const boxD = document.getElementById('box-d');
+    const boxV = document.getElementById('box-v');
+    const boxA = document.getElementById('box-a');
+
+    let historico = [];
+    const maxPuntos = 60; 
+
+    const config = {
+      d: { color: '#d9534f', min: 0, maxDefault: 4.0 },
+      v: { color: '#5cb85c', min: -2.0, maxDefault: 2.0 },
+      a: { color: '#f0ad4e', min: -5.0, maxDefault: 5.0 }
+    };
+
+    // Función que muestra solo la caja de la variable seleccionada
+    function actualizarVistaCajas() {
+      const varSel = selectBox.value;
+      boxD.style.display = (varSel === 'd') ? 'block' : 'none';
+      boxV.style.display = (varSel === 'v') ? 'block' : 'none';
+      boxA.style.display = (varSel === 'a') ? 'block' : 'none';
+    }
+
+    function dibujarGrafica() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if(historico.length < 2) return;
+
+      const varSel = selectBox.value;
+      const c = config[varSel];
+
+      let t_inicio = historico[0].t;
+      let t_fin = historico[historico.length - 1].t;
+      let rangoT = (t_fin - t_inicio) || 1;
+
+      let valoresY = historico.map(p => p[varSel]);
+      let maxY = Math.max(...valoresY, c.maxDefault);
+      let minY = Math.min(...valoresY, c.min);
+
+      const padX = 15;
+      const padY = 20;
+      const grafW = canvas.width - 2 * padX;
+      const grafH = canvas.height - 2 * padY;
+
+      ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
+      for(let i=0; i<=5; i++) { 
+        let y = padY + grafH * (i/5); 
+        ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(canvas.width - padX, y); ctx.stroke(); 
+      }
+
+      let yCero = canvas.height - padY - ((0 - minY) / (maxY - minY)) * grafH;
+      if (yCero >= padY && yCero <= canvas.height - padY) {
+        ctx.beginPath(); ctx.strokeStyle = '#999'; ctx.setLineDash([4, 4]);
+        ctx.moveTo(padX, yCero); ctx.lineTo(canvas.width - padX, yCero); ctx.stroke(); ctx.setLineDash([]);
+      }
+
+      ctx.beginPath(); ctx.strokeStyle = c.color; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+      for(let i = 0; i < historico.length; i++) {
+        let p = historico[i];
+        let x = padX + ((p.t - t_inicio) / rangoT) * grafW;
+        let y = canvas.height - padY - ((p[varSel] - minY) / (maxY - minY)) * grafH;
+        
+        if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Al cambiar la opción en el menú, actualizamos las cajas y redibujamos
+    selectBox.addEventListener('change', () => {
+      actualizarVistaCajas();
+      dibujarGrafica();
+    });
+
+    // Ejecutamos la función una vez al iniciar la página
+    actualizarVistaCajas();
+
+    setInterval(() => {
+      let urlSinCache = '/datos?_ts=' + new Date().getTime();
+      
+      fetch(urlSinCache)
+        .then(response => {
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          return response.json();
+        })
+        .then(datos => {
+          statusDiv.innerText = "GRAFICANDO";
+          statusDiv.style.background = "#d4edda"; statusDiv.style.color = "#155724";
+          
+          let d = isNaN(datos.d) ? 0 : datos.d;
+          let v = isNaN(datos.v) ? 0 : datos.v;
+          let a = isNaN(datos.a) ? 0 : datos.a;
+
+          debugLog.innerHTML = `[${new Date().toLocaleTimeString()}] -> D: ${d} m | V: ${v} m/s | A: ${a} m/s²`;
+
+          document.getElementById('valP').innerText = d.toFixed(3);
+          document.getElementById('valV').innerText = v.toFixed(3);
+          document.getElementById('valA').innerText = a.toFixed(3);
+          
+          historico.push({ t: (datos.t / 1000.0), d: d, v: v, a: a });
+          if(historico.length > maxPuntos) historico.shift();
+          dibujarGrafica();
+        })
+        .catch(err => {
+          statusDiv.innerText = "ESPERANDO CONEXIÓN...";
+          statusDiv.style.background = "#fff3cd"; statusDiv.style.color = "#856404";
+        });
+    }, 100); 
+  </script>
+</body>
+</html>

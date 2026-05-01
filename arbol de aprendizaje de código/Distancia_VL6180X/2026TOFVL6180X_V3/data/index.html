@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhySyS Lab - v3</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
+    h2 { margin-top: 5px; color: #0056b3; font-size: 20px; }
+    .dashboard { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 15px; }
+    .data-box { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 30%; min-width: 100px; margin-bottom: 5px; }
+    .data-box span { display: block; font-size: 22px; font-weight: bold; margin-top: 5px; }
+    .val-p { color: #d9534f; }
+    .val-v { color: #5cb85c; }
+    .val-a { color: #f0ad4e; }
+    canvas { background: white; border: 2px solid #ccc; border-radius: 8px; width: 100%; max-width: 600px; height: 250px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .ejes { font-size: 12px; color: #666; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <h2>PhySyS: Cinemática en Tiempo Real</h2>
+  
+  <div class="dashboard">
+    <div class="data-box">Posición (m) <span id="valP" class="val-p">0.000</span></div>
+    <div class="data-box">Velocidad (m/s) <span id="valV" class="val-v">0.000</span></div>
+    <div class="data-box">Acel. (m/s²) <span id="valA" class="val-a">0.000</span></div>
+  </div>
+  
+  <canvas id="grafica" width="600" height="250"></canvas>
+  <div class="ejes">Eje X: Tiempo (s) | Eje Y: Posición (m)</div>
+  
+  <script>
+    const canvas = document.getElementById('grafica');
+    const ctx = canvas.getContext('2d');
+    
+    let historico = []; 
+    const maxPuntos = 50;
+
+    function dibujarGrafica() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if(historico.length < 2) return;
+
+      let t_inicio = historico[0].t;
+      let t_fin = historico[historico.length - 1].t;
+      let rangoT = t_fin - t_inicio;
+      if (rangoT === 0) rangoT = 1;
+
+      let maxD = Math.max(...historico.map(p => p.d), 0.4);
+      let minD = 0;
+
+      ctx.strokeStyle = '#eee';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(let i=1; i<5; i++) {
+        let y = canvas.height * (i/5);
+        ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#d9534f'; 
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+
+      for(let i = 0; i < historico.length; i++) {
+        let p = historico[i];
+        let x = ((p.t - t_inicio) / rangoT) * canvas.width;
+        let y = canvas.height - ((p.d - minD) / (maxD - minD)) * canvas.height;
+        
+        if(i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    setInterval(() => {
+      fetch('/datos').then(r => r.json()).then(datos => {
+        document.getElementById('valP').innerText = datos.d.toFixed(3);
+        document.getElementById('valV').innerText = datos.v.toFixed(3);
+        document.getElementById('valA').innerText = datos.a.toFixed(3);
+        
+        let tiempoSegundos = datos.t / 1000.0;
+        
+        historico.push({ t: tiempoSegundos, d: datos.d });
+        if(historico.length > maxPuntos) {
+          historico.shift();
+        }
+        
+        dibujarGrafica();
+      }).catch(err => console.log("Esperando..."));
+    }, 100);
+  </script>
+</body>
+</html>
