@@ -1,0 +1,17 @@
+{
+    "name": "Physys Lab",
+    "short_name": "Physys",
+    "description": "Laboratorio de Física Portátil — ESP32-S3",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#06080f",
+    "theme_color": "#0a0e1a",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2300d4ff'/><text x='50' y='62' text-anchor='middle' font-size='36' fill='%23060810' font-weight='bold'>P</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}
