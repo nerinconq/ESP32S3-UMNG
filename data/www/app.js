@@ -119,13 +119,15 @@ function connectWS() {
                 $('sys-status').style.color = '#f0b429';
                 $('btn-trigger').classList.add('recording');
                 $('btn-trigger').innerHTML = '🎯 Esperando...';
+                $('btn-trigger').style.display = 'none';
+                $('btn-trigger-stop').style.display = '';
                 return;
             }
 
             if (data.command === 'TRIGGER_START') {
                 $('sys-status').textContent = 'Grabando (Auto)';
                 $('sys-status').style.color = '#14f0c5';
-                $('btn-trigger').innerHTML = '🎯 Grabando';
+                $('btn-trigger-stop').innerHTML = '⏹ Grabando...';
                 sensorRecording.TOF = true;
                 sensorData.TOF = [];
                 chartData = [];
@@ -134,12 +136,13 @@ function connectWS() {
             }
 
             if (data.command === 'TRIGGER_STOP') {
-                $('sys-status').textContent = 'Fin de Carrera';
+                $('sys-status').textContent = 'Toma completa';
                 $('sys-status').style.color = '#a78bfa';
                 $('btn-trigger').classList.remove('recording');
-                $('btn-trigger').innerHTML = '🎯 Gatillo';
+                $('btn-trigger').innerHTML = '🎯 Toma Auto';
+                $('btn-trigger').style.display = '';
+                $('btn-trigger-stop').style.display = 'none';
                 sensorRecording.TOF = false;
-                alert('Toma de muestra completada automáticamente.');
                 return;
             }
 
@@ -628,8 +631,21 @@ function toggleHxStability() {
 
 function toggleTriggerMode() {
     if (ws && ws.readyState === WebSocket.OPEN) {
+        const stopDist = parseInt($('auto-stop-dist').value) || 0;
+        ws.send('SET_TUBE:' + stopDist);
         ws.send('START_TRIGGER');
     }
+}
+
+function stopTriggerMode() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('STOP');
+    }
+    $('btn-trigger').style.display = '';
+    $('btn-trigger-stop').style.display = 'none';
+    $('btn-trigger').innerHTML = '🎯 Toma Auto';
+    $('btn-trigger').classList.remove('recording');
+    sensorRecording.TOF = false;
 }
 
 function exportToUsb() {
@@ -1398,18 +1414,13 @@ function rebootESP() {
     }
 }
 
-// ─── Trigger Mode ───
-function toggleTriggerMode() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send('START_TRIGGER');
-    }
-}
+// ─── Toma Automática ───
+// (Definición principal en línea ~629)
 
 function setTubeLength() {
-    const len = $('tube_length').value;
+    const len = $('tube_length') ? $('tube_length').value : ($('auto-stop-dist') ? $('auto-stop-dist').value : '0');
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send('SET_TUBE:' + len);
-        alert('Largo del tubo ajustado a ' + len + ' mm');
     }
 }
 

@@ -134,7 +134,7 @@ struct SystemState {
   bool triggerEnabled = false;
   bool isWaitingForTrigger = false;
   float initialDistance = 0;
-  float tubeLength = 500.0;      // mm (Largo del tubo de montaje)
+  float tubeLength = 0;         // mm (0 = desactivado, sin auto-stop)
   float triggerThreshold = 2.0;  // mm (Zona muerta)
   float distMin = 30.0;
   float distMax = 2000.0;
@@ -360,10 +360,10 @@ void readSensors() {
           setLED(CRGB::Blue);
           bufferIndex = 0; // Reset buffer para nueva captura
           ws.textAll("{\"command\":\"TRIGGER_START\",\"t\":0}");
-          Serial.println("[TRIGGER] ¡Movimiento detectado! Iniciando registro automático.");
+          Serial.println("[AUTO] ¡Movimiento detectado! Iniciando registro automático.");
         }
       } 
-      else if (state.triggerEnabled && state.measuring) {
+      else if (state.triggerEnabled && state.measuring && state.tubeLength > 0) {
         if (state.lastDistance >= state.tubeLength) {
           state.measuring = false;
           state.triggerEnabled = false;
@@ -374,7 +374,7 @@ void readSensors() {
           blinkLED(CRGB::Green, 3, 150);
           setLED(CRGB(20, 20, 20));
           ws.textAll("{\"command\":\"TRIGGER_STOP\"}");
-          Serial.printf("[TRIGGER] Fin de carrera alcanzado (%.1f mm). Deteniendo registro.\n", state.lastDistance);
+          Serial.printf("[AUTO] Fin de carrera alcanzado (%.1f mm). Deteniendo registro.\n", state.lastDistance);
         }
       }
 
@@ -498,7 +498,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       state.initialDistance = state.lastDistance;
       state.measuring = false; 
       setLED(CRGB::Orange); 
-      Serial.printf("[CMD] Modo Gatillo activado. Posición inicial: %.1f mm. Umbral: %.1f mm\n", state.initialDistance, state.triggerThreshold);
+      Serial.printf("[AUTO] Toma automática activada. Posición inicial: %.1f mm. Umbral: %.1f mm\n", state.initialDistance, state.triggerThreshold);
       ws.textAll("{\"command\":\"WAITING_TRIGGER\"}");
     }
     else if (msg.startsWith("SET_TUBE:")) {

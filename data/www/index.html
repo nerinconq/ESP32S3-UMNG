@@ -81,7 +81,12 @@
                         <button id="btn-sensor-export" class="btn-action btn-teal" style="background-color: #10b981; color: white;" onclick="exportSensorCSV()">📥 Exportar CSV</button>
                         <button id="btn-sensor-clear" class="btn-action btn-warn" onclick="clearSensorData()">🗑️ Limpiar</button>
                         <button id="btn-esp-clear" class="btn-action btn-warn" onclick="clearESP32Data()" title="Borrar datos del ESP32">💾 Limpiar ESP</button>
-                        <button id="btn-trigger" class="btn-action btn-gold" onclick="toggleTriggerMode()" title="Gatillo automático (Toma de muestra)">🎯 Gatillo</button>
+                        <div id="auto-capture-container" style="display:inline-flex; align-items:center; gap:6px; background: rgba(255,180,0,0.1); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,180,0,0.3);">
+                            <input type="number" id="auto-stop-dist" class="select-premium" style="width:70px; font-size:12px; padding:4px 6px; border:1px solid #f0b429; text-align:center;" value="0" min="0" max="8000" placeholder="mm">
+                            <span style="font-size:11px; color:#94a3b8;">mm</span>
+                            <button id="btn-trigger" class="btn-action btn-gold" onclick="toggleTriggerMode()" title="Toma automática (0 = sin parada)">🎯 Toma Auto</button>
+                            <button id="btn-trigger-stop" class="btn-action btn-warn" onclick="stopTriggerMode()" title="Detener toma automática" style="display:none;">⏹ Parar</button>
+                        </div>
                         
                         <!-- Filtro Dinámico (solo para Fuerza) -->
                         <div id="hx-controls-container" style="display:none; align-items:center; gap:12px; margin-left:10px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px;">
