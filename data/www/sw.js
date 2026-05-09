@@ -1,6 +1,6 @@
 /* Physys Lab — Service Worker (Offline First) */
 
-const CACHE_NAME = 'physys-v7.0';
+const CACHE_NAME = 'physys-v8.0';
 const CACHE_FILES = [
     '/',
     '/index.html',

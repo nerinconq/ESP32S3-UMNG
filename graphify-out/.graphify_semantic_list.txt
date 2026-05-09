@@ -1,0 +1,26 @@
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\data\sensor_logic.py
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\data\www\app.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\data\www\firebase-sync.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\data\www\source.cpp
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\data\www\sw.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\data\sensor_logic.py
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\data\www\app.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\data\www\firebase-sync.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\data\www\sw.js
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\src\main.cpp
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\src\UsbHostMSC.h
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\src\main.cpp
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\src\UsbHostMSC.h
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Analisis_Tecnico_USB_Host_MSC.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Laboratorio de Bolsillo Antigravity v5.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\LISTADO_CRONOLOGICO_PETICIONES_NELSON.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Mapa_Proyecto_GraphyFYY.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\PLAN_IMPLEMENTACION_ACTUALIZADO.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Plan_Implementacion_Sensores.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Plan_Quemado_Hardware.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\Plan_Sincronizacion_Firebase.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\plan_usb_host_msc.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\project_architecture.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\Planes_AI\REPERTORIO_FINAL_DE_SOLICITUDES_NELSON.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\INSTRUCCIONES_DE_QUEMADO.md
+C:\Users\nelso\Documents\A_UMNG\ESP32S3 PHYSYS LAB\produccion\README_INSTALACION.md

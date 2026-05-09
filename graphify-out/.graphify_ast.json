@@ -1,0 +1,3072 @@
+{
+  "nodes": [
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "label": "main.cpp",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_main_safereboot",
+      "label": "safeReboot()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L132"
+    },
+    {
+      "id": "src_main_setled",
+      "label": "setLED()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L144"
+    },
+    {
+      "id": "src_main_blinkled",
+      "label": "blinkLED()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L149"
+    },
+    {
+      "id": "src_main_loadsettings",
+      "label": "loadSettings()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L161"
+    },
+    {
+      "id": "src_main_savesettings",
+      "label": "saveSettings()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L185"
+    },
+    {
+      "id": "src_main_initsensors",
+      "label": "initSensors()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L204"
+    },
+    {
+      "id": "src_main_readsensors",
+      "label": "readSensors()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L291"
+    },
+    {
+      "id": "src_main_onwsevent",
+      "label": "onWsEvent()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L408"
+    },
+    {
+      "id": "src_main_checkglobalstop",
+      "label": "checkGlobalStop()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L541"
+    },
+    {
+      "id": "src_main_broadcastsensordata",
+      "label": "broadcastSensorData()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L550"
+    },
+    {
+      "id": "src_main_setupapi",
+      "label": "setupAPI()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L589"
+    },
+    {
+      "id": "src_main_checkfactoryreset",
+      "label": "checkFactoryReset()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L795"
+    },
+    {
+      "id": "src_main_runusbexportmode",
+      "label": "runUsbExportMode()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L820"
+    },
+    {
+      "id": "src_main_setup",
+      "label": "setup()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L881"
+    },
+    {
+      "id": "src_main_loop",
+      "label": "loop()",
+      "file_type": "code",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1000"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "label": "UsbHostMSC.h",
+      "file_type": "code",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_usbhostmsc_usbhostmsc",
+      "label": "UsbHostMSC()",
+      "file_type": "code",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L10"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_source_cpp",
+      "label": "source.cpp",
+      "file_type": "code",
+      "source_file": "data\\www\\source.cpp",
+      "source_location": "L1"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_sensor_logic_py",
+      "label": "sensor_logic.py",
+      "file_type": "code",
+      "source_file": "data\\sensor_logic.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "label": "app.js",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "www_app_converttime",
+      "label": "convertTime()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L57"
+    },
+    {
+      "id": "www_app_timeunitlabel",
+      "label": "timeUnitLabel()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L62"
+    },
+    {
+      "id": "www_app",
+      "label": "$()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L82"
+    },
+    {
+      "id": "www_app_connectws",
+      "label": "connectWS()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L86"
+    },
+    {
+      "id": "www_app_updatedisplay",
+      "label": "updateDisplay()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L191"
+    },
+    {
+      "id": "www_app_updatesensorbadges",
+      "label": "updateSensorBadges()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L270"
+    },
+    {
+      "id": "www_app_pushchartpoint",
+      "label": "pushChartPoint()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L277"
+    },
+    {
+      "id": "www_app_drawchart",
+      "label": "drawChart()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L284"
+    },
+    {
+      "id": "www_app_switchtab",
+      "label": "switchTab()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L393"
+    },
+    {
+      "id": "www_app_updatesensorcount",
+      "label": "updateSensorCount()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L476"
+    },
+    {
+      "id": "www_app_togglesensorrecording",
+      "label": "toggleSensorRecording()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L485"
+    },
+    {
+      "id": "www_app_resetanglestate",
+      "label": "resetAngleState()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L519"
+    },
+    {
+      "id": "www_app_unwrapangle",
+      "label": "unwrapAngle()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L524"
+    },
+    {
+      "id": "www_app_prepareexportdata",
+      "label": "prepareExportData()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L542"
+    },
+    {
+      "id": "www_app_togglerecording",
+      "label": "toggleRecording()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L572"
+    },
+    {
+      "id": "www_app_taresensor",
+      "label": "tareSensor()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L608"
+    },
+    {
+      "id": "www_app_togglehxfilter",
+      "label": "toggleHxFilter()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L617"
+    },
+    {
+      "id": "www_app_togglehxstability",
+      "label": "toggleHxStability()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L623"
+    },
+    {
+      "id": "www_app_toggletriggermode",
+      "label": "toggleTriggerMode()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L629"
+    },
+    {
+      "id": "www_app_exporttousb",
+      "label": "exportToUsb()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L635"
+    },
+    {
+      "id": "www_app_rebootesp",
+      "label": "rebootESP()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L646"
+    },
+    {
+      "id": "www_app_toggleinvertencoder",
+      "label": "toggleInvertEncoder()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L652"
+    },
+    {
+      "id": "www_app_exportsensorcsv",
+      "label": "exportSensorCSV()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L660"
+    },
+    {
+      "id": "www_app_exportjson",
+      "label": "exportJSON()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L741"
+    },
+    {
+      "id": "www_app_downloadjson",
+      "label": "downloadJSON()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L769"
+    },
+    {
+      "id": "www_app_downloadcsv",
+      "label": "downloadCSV()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L797"
+    },
+    {
+      "id": "www_app_showexportmodal",
+      "label": "showExportModal()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L817"
+    },
+    {
+      "id": "www_app_triggerdownloadlink",
+      "label": "triggerDownloadLink()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L940"
+    },
+    {
+      "id": "www_app_savesamplerate",
+      "label": "saveSampleRate()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L965"
+    },
+    {
+      "id": "www_app_clearsensordata",
+      "label": "clearSensorData()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L977"
+    },
+    {
+      "id": "www_app_clearesp32data",
+      "label": "clearESP32Data()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L990"
+    },
+    {
+      "id": "www_app_togglelowpower",
+      "label": "toggleLowPower()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L999"
+    },
+    {
+      "id": "www_app_fetchsysteminfo",
+      "label": "fetchSystemInfo()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1012"
+    },
+    {
+      "id": "www_app_rendergpiopins",
+      "label": "renderGpioPins()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1150"
+    },
+    {
+      "id": "www_app_pollgpio",
+      "label": "pollGpio()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1176"
+    },
+    {
+      "id": "www_app_startgpiopolling",
+      "label": "startGpioPolling()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1188"
+    },
+    {
+      "id": "www_app_stopgpiopolling",
+      "label": "stopGpioPolling()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1196"
+    },
+    {
+      "id": "www_app_fetchconfig",
+      "label": "fetchConfig()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1295"
+    },
+    {
+      "id": "www_app_updateusbui",
+      "label": "updateUsbUI()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1320"
+    },
+    {
+      "id": "www_app_savetofconfig",
+      "label": "saveTofConfig()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1334"
+    },
+    {
+      "id": "www_app_toggleusbautolog",
+      "label": "toggleUsbAutoLog()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1369"
+    },
+    {
+      "id": "www_app_resetencoder",
+      "label": "resetEncoder()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1376"
+    },
+    {
+      "id": "www_app_settubelength",
+      "label": "setTubeLength()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1408"
+    },
+    {
+      "id": "www_app_updatelinenumbers",
+      "label": "updateLineNumbers()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1417"
+    },
+    {
+      "id": "www_app_loadexamplescript",
+      "label": "loadExampleScript()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1426"
+    },
+    {
+      "id": "www_app_loadcurrentscript",
+      "label": "loadCurrentScript()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1434"
+    },
+    {
+      "id": "www_app_savescript",
+      "label": "saveScript()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1451"
+    },
+    {
+      "id": "www_app_seteditorstatus",
+      "label": "setEditorStatus()",
+      "file_type": "code",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1476"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "label": "firebase-sync.js",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "www_firebase_sync_opendb",
+      "label": "openDB()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L21"
+    },
+    {
+      "id": "www_firebase_sync_savetoindexeddb",
+      "label": "saveToIndexedDB()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L41"
+    },
+    {
+      "id": "www_firebase_sync_getpendingexperiments",
+      "label": "getPendingExperiments()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L70"
+    },
+    {
+      "id": "www_firebase_sync_marksynced",
+      "label": "markSynced()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L86"
+    },
+    {
+      "id": "www_firebase_sync_countpending",
+      "label": "countPending()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L101"
+    },
+    {
+      "id": "www_firebase_sync_loadfirebasesdk",
+      "label": "loadFirebaseSDK()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L117"
+    },
+    {
+      "id": "www_firebase_sync_synctocloud",
+      "label": "syncToCloud()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L151"
+    },
+    {
+      "id": "www_firebase_sync_updatesyncbadge",
+      "label": "updateSyncBadge()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L207"
+    },
+    {
+      "id": "www_firebase_sync_initfirebasesync",
+      "label": "initFirebaseSync()",
+      "file_type": "code",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L229"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_sw_js",
+      "label": "sw.js",
+      "file_type": "code",
+      "source_file": "data\\www\\sw.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "label": "main.cpp",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_main_safereboot",
+      "label": "safeReboot()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L125"
+    },
+    {
+      "id": "src_main_setled",
+      "label": "setLED()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L137"
+    },
+    {
+      "id": "src_main_blinkled",
+      "label": "blinkLED()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L142"
+    },
+    {
+      "id": "src_main_loadsettings",
+      "label": "loadSettings()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L154"
+    },
+    {
+      "id": "src_main_savesettings",
+      "label": "saveSettings()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L178"
+    },
+    {
+      "id": "src_main_initsensors",
+      "label": "initSensors()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L197"
+    },
+    {
+      "id": "src_main_readsensors",
+      "label": "readSensors()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L288"
+    },
+    {
+      "id": "src_main_onwsevent",
+      "label": "onWsEvent()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L389"
+    },
+    {
+      "id": "src_main_checkglobalstop",
+      "label": "checkGlobalStop()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L502"
+    },
+    {
+      "id": "src_main_broadcastsensordata",
+      "label": "broadcastSensorData()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L511"
+    },
+    {
+      "id": "src_main_setupapi",
+      "label": "setupAPI()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L554"
+    },
+    {
+      "id": "src_main_checkfactoryreset",
+      "label": "checkFactoryReset()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L780"
+    },
+    {
+      "id": "src_main_setup",
+      "label": "setup()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L805"
+    },
+    {
+      "id": "src_main_loop",
+      "label": "loop()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L911"
+    },
+    {
+      "id": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_usbhostmsc_h",
+      "label": "UsbHostMSC.h",
+      "file_type": "code",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_usbhostmsc_usbhostmsc",
+      "label": "UsbHostMSC()",
+      "file_type": "code",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L8"
+    }
+  ],
+  "edges": [
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "arduino",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "wifi",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "dnsserver",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "espasyncwebserver",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "asyncwebsocket",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "fs",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "littlefs",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "arduinojson",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "wire",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "vl53l0x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "vl53l1x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "vl6180x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "sparkfun_vl53l5cx_library",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "as5600",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "hx711",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "fastled",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "preferences",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "espmdns",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "usbhostmsc",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_safereboot",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L132",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_setled",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L144",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_blinkled",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L149",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_loadsettings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L161",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_savesettings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L185",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_initsensors",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L204",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_readsensors",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L291",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_onwsevent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L408",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_checkglobalstop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L541",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_broadcastsensordata",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L550",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_setupapi",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L589",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_checkfactoryreset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L795",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_runusbexportmode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L820",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_setup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L881",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_main_cpp",
+      "target": "src_main_loop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1000",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_blinkled",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_readsensors",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L329",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_readsensors",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L342",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L440",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L449",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_checkglobalstop",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L467",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_savesettings",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L487",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_safereboot",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L536",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkglobalstop",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L544",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkglobalstop",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L545",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setupapi",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L689",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setupapi",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L751",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkfactoryreset",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L801",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_runusbexportmode",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L821",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_runusbexportmode",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L826",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_runusbexportmode",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L894",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_loadsettings",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L924",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_initsensors",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L958",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_setupapi",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L965",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L990",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_checkfactoryreset",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1003",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_readsensors",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1006",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_broadcastsensordata",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\main.cpp",
+      "source_location": "L1010",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "arduino",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "usb_host",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "msc_host",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "msc_host_vfs",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "esp_vfs_fat",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_src_usbhostmsc_h",
+      "target": "src_usbhostmsc_usbhostmsc",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\UsbHostMSC.h",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_converttime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_timeunitlabel",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L82",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L83",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_connectws",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L86",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_updatedisplay",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L191",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_updatesensorbadges",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L270",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_pushchartpoint",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L277",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_drawchart",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L284",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_switchtab",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L393",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_updatesensorcount",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L476",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglesensorrecording",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L485",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_resetanglestate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L519",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_unwrapangle",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L524",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_prepareexportdata",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L542",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglerecording",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L572",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_taresensor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L608",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglehxfilter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L617",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglehxstability",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L623",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_toggletriggermode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L629",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_exporttousb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L635",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_rebootesp",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L646",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_toggleinvertencoder",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L652",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_exportsensorcsv",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L660",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_exportjson",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L741",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_downloadjson",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L769",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_downloadcsv",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L797",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_showexportmodal",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L817",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_triggerdownloadlink",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L940",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_savesamplerate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L965",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_clearsensordata",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L977",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_clearesp32data",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L990",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglelowpower",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L999",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_fetchsysteminfo",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1012",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_rendergpiopins",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1150",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_pollgpio",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1176",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_startgpiopolling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1188",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_stopgpiopolling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1196",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_switchtab",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1203",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_fetchconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1295",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_updateusbui",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1320",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_savetofconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1334",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_savesamplerate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1347",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglehxfilter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1355",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_togglehxstability",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1361",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_toggleusbautolog",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1369",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_resetencoder",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1376",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_exporttousb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1384",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_rebootesp",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1393",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_toggletriggermode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1402",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_settubelength",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1408",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_updatelinenumbers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1417",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_loadexamplescript",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1426",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_loadcurrentscript",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1434",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_savescript",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1451",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_app_js",
+      "target": "www_app_seteditorstatus",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1476",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updatedisplay",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L198",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updatedisplay",
+      "target": "www_app_updatesensorbadges",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L213",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updatesensorbadges",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L271",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_drawchart",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L285",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_drawchart",
+      "target": "www_app_timeunitlabel",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L389",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L405",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_updatesensorcount",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L468",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_updatedisplay",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L472",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updatesensorcount",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L478",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglesensorrecording",
+      "target": "www_app_togglerecording",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L487",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglesensorrecording",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L490",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglesensorrecording",
+      "target": "www_app_prepareexportdata",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L505",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglerecording",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L574",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_taresensor",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L611",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_app_exportjson",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L662",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_app_prepareexportdata",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L668",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_app_timeunitlabel",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L671",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_app_downloadcsv",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L693",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L695",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportjson",
+      "target": "www_app_prepareexportdata",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L754",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportjson",
+      "target": "www_app_downloadjson",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L756",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportjson",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L758",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_downloadjson",
+      "target": "www_app_showexportmodal",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L794",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_downloadcsv",
+      "target": "www_app_showexportmodal",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L814",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_savesamplerate",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L966",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_clearsensordata",
+      "target": "www_app_updatesensorcount",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L985",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_clearsensordata",
+      "target": "www_app_drawchart",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L986",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglelowpower",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1001",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_rendergpiopins",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1151",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_startgpiopolling",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1190",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_startgpiopolling",
+      "target": "www_app_pollgpio",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1191",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_stopgpiopolling",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1219",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_updatelinenumbers",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1228",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_startgpiopolling",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1231",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_switchtab",
+      "target": "www_app_fetchconfig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1234",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updateusbui",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1321",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_savetofconfig",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1335",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_toggleusbautolog",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1370",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_resetencoder",
+      "target": "www_app_drawchart",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1380",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_settubelength",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1409",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_updatelinenumbers",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1418",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_loadexamplescript",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1429",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_loadexamplescript",
+      "target": "www_app_updatelinenumbers",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1430",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_loadexamplescript",
+      "target": "www_app_seteditorstatus",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1431",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_loadcurrentscript",
+      "target": "www_app_seteditorstatus",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1435",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_savescript",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1452",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_savescript",
+      "target": "www_app_seteditorstatus",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1454",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_seteditorstatus",
+      "target": "www_app",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\app.js",
+      "source_location": "L1477",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_opendb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_savetoindexeddb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_getpendingexperiments",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L70",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_marksynced",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L86",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_countpending",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_loadfirebasesdk",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L117",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_synctocloud",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_updatesyncbadge",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L207",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_data_www_firebase_sync_js",
+      "target": "www_firebase_sync_initfirebasesync",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L229",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_savetoindexeddb",
+      "target": "www_firebase_sync_opendb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_savetoindexeddb",
+      "target": "www_firebase_sync_updatesyncbadge",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_getpendingexperiments",
+      "target": "www_firebase_sync_opendb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_marksynced",
+      "target": "www_firebase_sync_opendb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_countpending",
+      "target": "www_firebase_sync_getpendingexperiments",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_loadfirebasesdk",
+      "target": "firebase_app_js",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L132",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_loadfirebasesdk",
+      "target": "firebase_firestore_js",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L133",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_loadfirebasesdk",
+      "target": "firebase_auth_js",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L134",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_synctocloud",
+      "target": "www_firebase_sync_loadfirebasesdk",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L161",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_synctocloud",
+      "target": "www_firebase_sync_updatesyncbadge",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L164",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_synctocloud",
+      "target": "www_firebase_sync_getpendingexperiments",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L168",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_synctocloud",
+      "target": "www_firebase_sync_marksynced",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L191",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_updatesyncbadge",
+      "target": "www_firebase_sync_countpending",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L211",
+      "weight": 1.0
+    },
+    {
+      "source": "www_firebase_sync_initfirebasesync",
+      "target": "www_firebase_sync_updatesyncbadge",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "data\\www\\firebase-sync.js",
+      "source_location": "L230",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "arduino",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "wifi",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "dnsserver",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "espasyncwebserver",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "asyncwebsocket",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "fs",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "littlefs",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "arduinojson",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "wire",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "vl53l0x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "vl53l1x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "vl6180x",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "sparkfun_vl53l5cx_library",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "as5600",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "hx711",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "fastled",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "preferences",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "usbhostmsc",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_safereboot",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L125",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_setled",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L137",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_blinkled",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L142",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_loadsettings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L154",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_savesettings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L178",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_initsensors",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L197",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_readsensors",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L288",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_onwsevent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L389",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_checkglobalstop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L502",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_broadcastsensordata",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L511",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_setupapi",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L554",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_checkfactoryreset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L780",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_setup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L805",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_main_cpp",
+      "target": "src_main_loop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L911",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_blinkled",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L144",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L421",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L430",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_checkglobalstop",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L436",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_savesettings",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L456",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_onwsevent",
+      "target": "src_main_safereboot",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L497",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkglobalstop",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L505",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkglobalstop",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L506",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setupapi",
+      "target": "src_main_blinkled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L668",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setupapi",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L733",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_checkfactoryreset",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L786",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_setled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L816",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_loadsettings",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L838",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_initsensors",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L870",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_setup",
+      "target": "src_main_setupapi",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L877",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_checkfactoryreset",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L914",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_readsensors",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L916",
+      "weight": 1.0
+    },
+    {
+      "source": "src_main_loop",
+      "target": "src_main_broadcastsensordata",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\main.cpp",
+      "source_location": "L920",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_usbhostmsc_h",
+      "target": "arduino",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_usbhostmsc_h",
+      "target": "usb_host",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_usbhostmsc_h",
+      "target": "usb_msc",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "c_users_nelso_documents_a_umng_esp32s3_physys_lab_produccion_src_usbhostmsc_h",
+      "target": "src_usbhostmsc_usbhostmsc",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "produccion\\src\\UsbHostMSC.h",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglesensorrecording",
+      "target": "www_firebase_sync_savetoindexeddb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "data\\www\\app.js",
+      "source_location": "L507",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_togglerecording",
+      "target": "www_firebase_sync_savetoindexeddb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "data\\www\\app.js",
+      "source_location": "L601",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportsensorcsv",
+      "target": "www_firebase_sync_savetoindexeddb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "data\\www\\app.js",
+      "source_location": "L707",
+      "weight": 1.0
+    },
+    {
+      "source": "www_app_exportjson",
+      "target": "www_firebase_sync_savetoindexeddb",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "data\\www\\app.js",
+      "source_location": "L766",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

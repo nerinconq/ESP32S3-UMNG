@@ -25,13 +25,15 @@
 #include <HX711.h>
 #include <FastLED.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
 #include "UsbHostMSC.h" // Wrapper de la librería chegewara
 
-// Almacenamiento USB
+Preferences preferences;
 UsbHostMSC usbHost;
 bool usbConnected = false;
 bool usbLogActive = false;
-File usbLogFile;
+// Flag para control de reinicio en modo USB
+String bootMode = "normal";
 
 // ═══════════════════════════════════════════════════════════════
 // PINOUT (Freenove ESP32-S3 WROOM Reference)
@@ -69,8 +71,6 @@ ToFModel activeToF = MODEL_L0X;
 String currentToFModel = "vl53l0x";
 int sampleRateMs = 10; // Frecuencia por defecto: 100 Hz (10 ms)
 
-Preferences preferences;
-
 AS5600 encoder(&I2C_ENC);  // AS5600 en Bus 1
 HX711 loadCell;
 CRGB leds[NUM_LEDS];
@@ -87,6 +87,19 @@ struct SensorMeasure {
   bool active = false;
   unsigned long startTime = 0;
 };
+
+// Estructura para almacenamiento en PSRAM (Captura de alta velocidad)
+struct DataPoint {
+  uint32_t t;
+  float dist;
+  float vel;
+  float weight;
+  float angle;
+};
+
+#define MAX_SAMPLES 60000 
+DataPoint* highSpeedBuffer = nullptr;
+uint32_t bufferIndex = 0;
 
 struct SystemState {
   bool tofReady = false;
@@ -117,6 +130,15 @@ struct SystemState {
   float filteredWeight = 0;     // Para el filtro digital
   bool useHxFilter = true;      // Activar/desactivar filtro
   bool hxHighStability = false; // Modo 16-bit para reducir ruido
+  // Modo Gatillo (Sample Trigger)
+  bool triggerEnabled = false;
+  bool isWaitingForTrigger = false;
+  float initialDistance = 0;
+  float tubeLength = 500.0;      // mm (Largo del tubo de montaje)
+  float triggerThreshold = 2.0;  // mm (Zona muerta)
+  float distMin = 30.0;
+  float distMax = 2000.0;
+  
   unsigned long lastSampleTime = 0;
   unsigned long measurementStartTime = 0;
 } state;
@@ -168,11 +190,27 @@ void loadSettings() {
   Serial.printf("[NVS] Configuración cargada: ToF=%s, USB_Log=%d, Rate=%d ms (%d Hz)\n", 
                 currentToFModel.c_str(), usbLogActive, sampleRateMs, 1000/sampleRateMs);
   
-  if (currentToFModel == "vl53l0x") activeToF = MODEL_L0X;
-  else if (currentToFModel == "vl53l1x") activeToF = MODEL_L1X;
-  else if (currentToFModel == "vl53l1xv2") activeToF = MODEL_L1X_V2;
-  else if (currentToFModel == "vl6180") activeToF = MODEL_6180;
-  else if (currentToFModel == "vl53l5x") activeToF = MODEL_L5CX;
+  if (currentToFModel == "vl53l0x") {
+    activeToF = MODEL_L0X;
+    state.distMin = 30;
+    state.distMax = 2000;
+  } else if (currentToFModel == "vl53l1x" || currentToFModel == "vl53l1xv2") {
+    activeToF = (currentToFModel == "vl53l1x") ? MODEL_L1X : MODEL_L1X_V2;
+    state.distMin = 40;
+    state.distMax = 4000;
+  } else if (currentToFModel == "vl6180") {
+    activeToF = MODEL_6180;
+    state.distMin = 10;
+    state.distMax = 600;
+  } else if (currentToFModel == "vl53l5x") {
+    activeToF = MODEL_L5CX;
+    state.distMin = 20;
+    state.distMax = 4000;
+  } else {
+    activeToF = MODEL_L0X;
+    state.distMin = 30;
+    state.distMax = 2000;
+  }
 }
 
 void saveSettings() {
@@ -204,9 +242,7 @@ void initSensors() {
     case MODEL_L0X:
       tof0X.setBus(&I2C_TOF);
       if (tof0X.init()) {
-        // Ajustar timing budget para la frecuencia deseada
-        // 20ms es el mínimo recomendado para alta precisión, pero podemos bajar a 10ms
-        uint32_t budget = (sampleRateMs * 1000) - 2000; // Un poco menos que el sample rate
+        uint32_t budget = (sampleRateMs * 1000) - 2000;
         if (budget < 10000) budget = 10000; 
         tof0X.setMeasurementTimingBudget(budget);
         tof0X.startContinuous(sampleRateMs);
@@ -218,13 +254,11 @@ void initSensors() {
     case MODEL_L1X_V2:
       tof1X.setBus(&I2C_TOF);
       if (tof1X.init()) {
-        // Para 100Hz (10ms), necesitamos modo Short y budget bajo
         if (sampleRateMs <= 20) {
           tof1X.setDistanceMode(VL53L1X::Short);
         } else {
           tof1X.setDistanceMode(VL53L1X::Long);
         }
-        // El budget mínimo para L1X es 20ms (50Hz), pero podemos intentar 15ms
         uint32_t budget = (sampleRateMs * 1000);
         if (budget < 15000) budget = 15000; 
         tof1X.setMeasurementTimingBudget(budget);
@@ -246,7 +280,7 @@ void initSensors() {
       if (tof5CX.begin(0x29, I2C_TOF)) {
         tof5CX.setResolution(8 * 8);
         int freq = 1000 / sampleRateMs;
-        if (freq > 15) freq = 15; // L5CX máximo es ~15-60Hz dependiendo de zona
+        if (freq > 15) freq = 15;
         tof5CX.setRangingFrequency(freq);
         tof5CX.startRanging();
         state.tofReady = true;
@@ -288,9 +322,8 @@ void initSensors() {
 void readSensors() {
   unsigned long now = millis();
   float dt = (now - state.lastSampleTime) / 1000.0; // segundos
-  if (dt < (sampleRateMs * 0.4) / 1000.0) return; // Permitir actualizar lecturas
+  if (dt < (sampleRateMs * 0.4) / 1000.0) return; 
 
-  // ToF → Posición → Velocidad → Aceleración
   if (state.tofReady) {
     float dist = 0;
     bool timeout = false;
@@ -307,7 +340,7 @@ void readSensors() {
       if (tof5CX.isDataReady()) {
         VL53L5CX_ResultsData data;
         if (tof5CX.getRangingData(&data)) {
-          dist = data.distance_mm[0]; // Centro
+          dist = data.distance_mm[0]; 
         }
       }
     }
@@ -316,31 +349,67 @@ void readSensors() {
       state.prevDistance = state.lastDistance;
       state.lastDistance = dist;
 
+      if (state.triggerEnabled && state.isWaitingForTrigger) {
+        if (abs(state.lastDistance - state.initialDistance) >= state.triggerThreshold) {
+          state.isWaitingForTrigger = false;
+          state.measuring = true;
+          state.measurementStartTime = millis();
+          state.tofMeasure.active = true;
+          state.encMeasure.active = true;
+          state.hxMeasure.active = true;
+          setLED(CRGB::Blue);
+          bufferIndex = 0; // Reset buffer para nueva captura
+          ws.textAll("{\"command\":\"TRIGGER_START\",\"t\":0}");
+          Serial.println("[TRIGGER] ¡Movimiento detectado! Iniciando registro automático.");
+        }
+      } 
+      else if (state.triggerEnabled && state.measuring) {
+        if (state.lastDistance >= state.tubeLength) {
+          state.measuring = false;
+          state.triggerEnabled = false;
+          state.tofMeasure.active = false;
+          state.encMeasure.active = false;
+          state.hxMeasure.active = false;
+          setLED(CRGB(20, 20, 20));
+          blinkLED(CRGB::Green, 3, 150);
+          setLED(CRGB(20, 20, 20));
+          ws.textAll("{\"command\":\"TRIGGER_STOP\"}");
+          Serial.printf("[TRIGGER] Fin de carrera alcanzado (%.1f mm). Deteniendo registro.\n", state.lastDistance);
+        }
+      }
+
       if (dt > 0 && state.lastSampleTime > 0) {
-        float newVel = (state.lastDistance - state.prevDistance) / (dt * 1000.0); // m/s
-        state.lastAccel = (newVel - state.lastVelocity) / dt; // m/s²
+        float newVel = (state.lastDistance - state.prevDistance) / (dt * 1000.0); 
+        state.lastAccel = (newVel - state.lastVelocity) / dt; 
         state.prevVelocity = state.lastVelocity;
         state.lastVelocity = newVel;
+      }
+
+      if (state.measuring && highSpeedBuffer && bufferIndex < MAX_SAMPLES) {
+        highSpeedBuffer[bufferIndex++] = {
+          (uint32_t)(millis() - state.measurementStartTime),
+          state.lastDistance,
+          state.lastVelocity,
+          state.lastWeight,
+          state.lastAngleDeg
+        };
       }
     }
   }
 
-  // Encoder → Ángulo (deg + rad) → Velocidad Angular → Aceleración Angular
   if (state.encoderReady) {
-    int rawAngle = encoder.readAngle(); // 0 a 4095
+    int rawAngle = encoder.readAngle(); 
     
     if (state.lastRawAngle == -1) {
       state.lastRawAngle = rawAngle;
     }
 
-    // Calcular delta con manejo de wrap-around (rollover)
     int delta = rawAngle - state.lastRawAngle;
-    if (delta > 2048) delta -= 4096;      // Giro en sentido negativo cruzando el cero
-    else if (delta < -2048) delta += 4096; // Giro en sentido positivo cruzando el cero
+    if (delta > 2048) delta -= 4096;      
+    else if (delta < -2048) delta += 4096; 
 
     state.lastRawAngle = rawAngle;
 
-    // Aplicar inversión y acumular (Multi-vuelta)
     float multiplier = state.invertEncoder ? -1.0 : 1.0;
     state.cumulativeAngleDeg += (delta * (360.0 / 4096.0)) * multiplier;
 
@@ -348,35 +417,27 @@ void readSensors() {
     state.lastAngleRad = state.lastAngleDeg * DEG_TO_RAD;
 
     if (dt > 0 && state.lastSampleTime > 0) {
-      float newAngVel = (state.lastAngleRad - state.prevAngleRad) / dt; // rad/s
-      state.angularAccelRad = (newAngVel - state.prevAngularVel) / dt;  // rad/s²
+      float newAngVel = (state.lastAngleRad - state.prevAngleRad) / dt; 
+      state.angularAccelRad = (newAngVel - state.prevAngularVel) / dt;  
       state.prevAngularVel = state.angularVelRad;
       state.angularVelRad = newAngVel;
     }
     state.prevAngleRad = state.lastAngleRad;
   }
 
-  // Celda de Carga → Peso/Fuerza
   if (state.loadCellReady && loadCell.is_ready()) {
     long rawValue = loadCell.read();
-    
-    // Si el modo alta estabilidad está activo, reducimos la resolución a 16 bits reales
-    // El HX711 es de 24 bits, desplazamos 8 bits para eliminar el ruido de fondo.
     if (state.hxHighStability) {
       rawValue = (rawValue >> 8) << 8;
     }
-    
-    // Calculamos el valor escalado
     float raw = (float)(rawValue - loadCell.get_offset()) / loadCell.get_scale();
 
     if (state.useHxFilter) {
-      // Filtro EMA (Exponential Moving Average) para suavizar
-      // y[n] = 0.2 * x[n] + 0.8 * y[n-1]
       state.filteredWeight = (0.2f * raw) + (0.8f * state.filteredWeight);
       state.lastWeight = state.filteredWeight;
     } else {
       state.lastWeight = raw;
-      state.filteredWeight = raw; // Mantener filtro sincronizado
+      state.filteredWeight = raw; 
     }
   }
 
@@ -389,7 +450,6 @@ void readSensors() {
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
-    // Enviar configuración actual al conectar para sincronizar UI
     JsonDocument doc;
     doc["config"]["tof_model"] = currentToFModel;
     doc["config"]["usb_log"] = usbLogActive;
@@ -401,6 +461,8 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     doc["sensors"]["encoder"] = state.encoderReady;
     doc["sensors"]["loadcell"] = state.loadCellReady;
     doc["sensors"]["usb"] = usbConnected;
+    doc["config"]["trigger_enabled"] = state.triggerEnabled;
+    doc["config"]["tube_length"] = state.tubeLength;
     String json;
     serializeJson(doc, json);
     client->text(json);
@@ -409,29 +471,40 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     Serial.printf("[WS] Cliente #%u desconectado\n", client->id());
   } else if (type == WS_EVT_DATA) {
     String msg = String((char*)data).substring(0, len);
-    // Comandos globales
     if (msg == "START") {
       state.measuring = true;
       state.measurementStartTime = millis();
       state.tofMeasure.active = true;
       state.encMeasure.active = true;
       state.hxMeasure.active = true;
-      state.cumulativeAngleDeg = 0; // Reset acumulador al inicio
-      state.lastRawAngle = -1;      // Forzar recalibración de delta
+      state.cumulativeAngleDeg = 0; 
+      state.lastRawAngle = -1;      
       setLED(CRGB::Blue);
-      ws.textAll("{\"command\":\"RESET\"}"); // Sincronizar tiempo en cliente
+      ws.textAll("{\"command\":\"RESET\"}"); 
       Serial.println("[CMD] Medición global iniciada (Tiempo y Ángulo puestos a cero)");
     } else if (msg == "STOP") {
       state.measuring = false;
       state.tofMeasure.active = false;
       state.encMeasure.active = false;
       state.hxMeasure.active = false;
-      setLED(CRGB::White);
+      setLED(CRGB(20, 20, 20));
       blinkLED(CRGB::Green, 3, 150);
-      setLED(CRGB::White);
+      setLED(CRGB(20, 20, 20));
       Serial.println("[CMD] Medición global detenida");
     }
-    // Comandos por sensor
+    else if (msg == "START_TRIGGER") {
+      state.triggerEnabled = true;
+      state.isWaitingForTrigger = true;
+      state.initialDistance = state.lastDistance;
+      state.measuring = false; 
+      setLED(CRGB::Orange); 
+      Serial.printf("[CMD] Modo Gatillo activado. Posición inicial: %.1f mm. Umbral: %.1f mm\n", state.initialDistance, state.triggerThreshold);
+      ws.textAll("{\"command\":\"WAITING_TRIGGER\"}");
+    }
+    else if (msg.startsWith("SET_TUBE:")) {
+      state.tubeLength = msg.substring(9).toFloat();
+      Serial.printf("[CMD] Largo del tubo ajustado a: %.1f mm\n", state.tubeLength);
+    }
     else if (msg == "START_TOF") { state.tofMeasure.active = true; state.measuring = true; state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
     else if (msg == "STOP_TOF")  { state.tofMeasure.active = false; checkGlobalStop(); }
     else if (msg == "START_ENC") { 
@@ -475,7 +548,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         Serial.println("[CMD] Celda de carga tarada");
       }
     }
-    // Comandos de Configuración
     else if (msg.startsWith("SET_TOF:")) {
       currentToFModel = msg.substring(8);
       currentToFModel.toLowerCase();
@@ -492,6 +564,15 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         ws.textAll("{\"config\":{\"sample_rate\":" + String(sampleRateMs) + "}}");
       }
     }
+    else if (msg == "USB_EXPORT") {
+      preferences.begin("physys", false);
+      preferences.putString("boot_mode", "usb_export");
+      preferences.end();
+      ws.textAll("{\"status\":\"usb_export_starting\"}");
+      Serial.println("[USB] Reiniciando para exportación...");
+      delay(1000);
+      ESP.restart();
+    }
     else if (msg == "REBOOT") {
       Serial.println("[CMD] Comando REBOOT recibido");
       safeReboot();
@@ -502,9 +583,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 void checkGlobalStop() {
   if (!state.tofMeasure.active && !state.encMeasure.active && !state.hxMeasure.active) {
     state.measuring = false;
-    setLED(CRGB::White);
+    setLED(CRGB(20, 20, 20));
     blinkLED(CRGB::Green, 3, 150);
-    setLED(CRGB::White);
+    setLED(CRGB(20, 20, 20));
   }
 }
 
@@ -512,31 +593,27 @@ void broadcastSensorData() {
   static unsigned long lastBroadcast = 0;
   unsigned long now = millis();
   
-  // Throttling: Solo enviamos a la Web a un máximo de 30Hz (~33ms) para no saturar el navegador,
-  // independientemente de la frecuencia de muestreo interna.
   if (ws.count() == 0 || !state.measuring || (now - lastBroadcast < 33)) return;
   lastBroadcast = now;
 
   JsonDocument doc;
-  doc["t"] = millis() - state.measurementStartTime; // Tiempo relativo a cero
-  // Cinemática Lineal
-  doc["dist"] = state.lastDistance;            // mm
-  doc["vel"] = state.lastVelocity;             // m/s
-  doc["acc"] = state.lastAccel;                // m/s²
-  // Cinemática Angular
-  doc["angleDeg"] = state.lastAngleDeg;        // grados
-  doc["angleRad"] = state.lastAngleRad;        // radianes
-  doc["angVel"] = state.angularVelRad;         // rad/s
-  doc["angAcc"] = state.angularAccelRad;       // rad/s²
-  // Dinámica
-  doc["weight"] = state.lastWeight;            // gramos
-  doc["mass"] = state.lastWeight / 1000.0;     // kg
-  doc["weightN"] = (state.lastWeight / 1000.0) * 9.81; // Peso vertical (N)
-  // Estado de sensores
+  doc["t"] = millis() - state.measurementStartTime; 
+  doc["dist"] = state.lastDistance;            
+  doc["vel"] = state.lastVelocity;             
+  doc["acc"] = state.lastAccel;                
+  doc["angleDeg"] = state.lastAngleDeg;        
+  doc["angleRad"] = state.lastAngleRad;        
+  doc["angVel"] = state.angularVelRad;         
+  doc["angAcc"] = state.angularAccelRad;       
+  doc["weight"] = state.lastWeight;            
+  doc["mass"] = state.lastWeight / 1000.0;     
+  doc["weightN"] = (state.lastWeight / 1000.0) * 9.81; 
   doc["sensors"]["tof"] = state.tofReady;
   doc["sensors"]["encoder"] = state.encoderReady;
   doc["sensors"]["loadcell"] = state.loadCellReady;
   doc["sensors"]["usb"] = usbConnected;
+  doc["config"]["trigger_enabled"] = state.triggerEnabled;
+  doc["config"]["waiting_trigger"] = state.isWaitingForTrigger;
   doc["config"]["tof_model"] = currentToFModel;
   doc["config"]["usb_log"] = usbLogActive;
   doc["config"]["sample_rate"] = sampleRateMs;
@@ -552,7 +629,6 @@ void broadcastSensorData() {
 // API ENDPOINTS
 // ═══════════════════════════════════════════════════════════════
 void setupAPI() {
-  // Estado del sistema
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *req) {
     JsonDocument doc;
     doc["heap"] = ESP.getFreeHeap();
@@ -574,57 +650,25 @@ void setupAPI() {
     req->send(200, "application/json", json);
   });
 
-  // Configuración/branding del dispositivo (H6)
   server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *req) {
     if (SystemFS.exists("/config.json")) {
       req->send(SystemFS, "/config.json", "application/json");
     } else {
-      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab\",\"version\":\"v6.1\"}");
+      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab — UMNG\",\"version\":\"v8.0\"}");
     }
   });
 
-  // Estado de pines GPIO — GPIO Viewer Embebido (H4)
   server.on("/api/gpio", HTTP_GET, [](AsyncWebServerRequest *req) {
     JsonDocument doc;
-    // Todos los GPIO accesibles del ESP32-S3 WROOM-1
-    // GPIO 22-34 son internos (flash/PSRAM), no expuestos
     struct PinInfo { int gpio; const char* label; const char* fn; };
     PinInfo allPins[] = {
       {0,  "BOOT",     "boot"},
-      {1,  "GPIO1",    "gpio"},
-      {2,  "GPIO2",    "gpio"},
-      {3,  "GPIO3",    "gpio"},
       {4,  "TOF_SDA",  "i2c"},
       {5,  "TOF_SCL",  "i2c"},
       {6,  "HX_DT",    "serial"},
       {7,  "HX_SCK",   "serial"},
-      {8,  "GPIO8",    "gpio"},
-      {9,  "GPIO9",    "gpio"},
       {10, "ENC_SDA",  "i2c"},
       {11, "ENC_SCL",  "i2c"},
-      {12, "GPIO12",   "gpio"},
-      {13, "GPIO13",   "gpio"},
-      {14, "GPIO14",   "gpio"},
-      {15, "GPIO15",   "gpio"},
-      {16, "GPIO16",   "gpio"},
-      {17, "GPIO17",   "gpio"},
-      {18, "GPIO18",   "gpio"},
-      {19, "USB_D-",   "usb"},
-      {20, "USB_D+",   "usb"},
-      {21, "GPIO21",   "gpio"},
-      {35, "GPIO35",   "gpio"},
-      {36, "GPIO36",   "gpio"},
-      {37, "GPIO37",   "gpio"},
-      {38, "GPIO38",   "gpio"},
-      {39, "GPIO39",   "gpio"},
-      {40, "GPIO40",   "gpio"},
-      {41, "GPIO41",   "gpio"},
-      {42, "GPIO42",   "gpio"},
-      {43, "TX",       "uart"},
-      {44, "RX",       "uart"},
-      {45, "GPIO45",   "gpio"},
-      {46, "GPIO46",   "gpio"},
-      {47, "GPIO47",   "gpio"},
       {48, "WS2812",   "led"}
     };
     const int numPins = sizeof(allPins) / sizeof(allPins[0]);
@@ -644,33 +688,51 @@ void setupAPI() {
     req->send(200, "application/json", json);
   });
 
-  // Guardar experimento en partición de Datos (4MB)
   server.on("/api/data", HTTP_POST, [](AsyncWebServerRequest *req) {},
     NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
       static File uploadFile;
+      static FILE* usbUploadFile = nullptr;
       static String lastFilename;
 
       if (index == 0) {
-        // Inicio del archivo
         lastFilename = "/exp_" + String(millis()) + ".json";
         uploadFile = DataFS.open(lastFilename, "w");
+        
+        if (usbConnected) {
+            String usbPath = "/usb" + lastFilename;
+            usbUploadFile = fopen(usbPath.c_str(), "w");
+            if (usbUploadFile) {
+                Serial.printf("[USB] Iniciando guardado en pendrive: %s\n", usbPath.c_str());
+            } else {
+                Serial.println("[USB] Error al crear archivo en pendrive");
+            }
+        }
         Serial.printf("[DATA] Iniciando guardado: %s (%d bytes total)\n", lastFilename.c_str(), total);
       }
 
       if (uploadFile) {
         uploadFile.write(data, len);
       }
+      
+      if (usbUploadFile) {
+        fwrite(data, 1, len, usbUploadFile);
+      }
 
       if (index + len == total) {
-        // Fin del archivo
         if (uploadFile) uploadFile.close();
+        
+        if (usbUploadFile) {
+            fclose(usbUploadFile);
+            usbUploadFile = nullptr;
+            Serial.printf("[USB] Guardado en pendrive completo.\n");
+        }
+        
         req->send(200, "application/json", "{\"ok\":true,\"file\":\"" + lastFilename + "\"}");
         blinkLED(CRGB::Green, 3, 150);
         Serial.printf("[DATA] Guardado completo: %s\n", lastFilename.c_str());
       }
   });
 
-  // Exportar todos los experimentos (para bitácora-UMNG)
   server.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *req) {
     JsonDocument doc;
     JsonArray experiments = doc["experiments"].to<JsonArray>();
@@ -691,7 +753,6 @@ void setupAPI() {
     req->send(200, "application/json", json);
   });
 
-  // Listar archivos de datos con tamaños
   server.on("/api/data/list", HTTP_GET, [](AsyncWebServerRequest *req) {
     JsonDocument doc;
     JsonArray files = doc["files"].to<JsonArray>();
@@ -711,7 +772,6 @@ void setupAPI() {
     req->send(200, "application/json", json);
   });
 
-  // Limpiar todos los datos del ESP32
   server.on("/api/data/clear", HTTP_DELETE, [](AsyncWebServerRequest *req) {
     int count = 0;
     File root = DataFS.open("/");
@@ -730,11 +790,10 @@ void setupAPI() {
     serializeJson(doc, json);
     req->send(200, "application/json", json);
     blinkLED(CRGB::Yellow, 2, 200);
-    setLED(CRGB::White);
+    setLED(CRGB(20, 20, 20));
     Serial.printf("[DATA] Limpieza: %d archivos eliminados\n", count);
   });
 
-  // Leer script Python actual (GET)
   server.on("/api/python", HTTP_GET, [](AsyncWebServerRequest *req) {
     File f = SystemFS.open("/sensor_logic.py", "r");
     if (f) {
@@ -744,7 +803,6 @@ void setupAPI() {
     }
   });
 
-  // Recibir script Python del estudiante (POST)
   server.on("/api/python", HTTP_POST, [](AsyncWebServerRequest *req) {},
     NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
       File f = SystemFS.open("/sensor_logic.py", "w");
@@ -755,11 +813,10 @@ void setupAPI() {
         Serial.printf("[PYTHON] Script actualizado (%d bytes)\n", len);
       } else {
         req->send(500, "application/json", "{\"ok\":false}");
-        setLED(CRGB(255, 0, 255)); // Magenta
+        setLED(CRGB(255, 0, 255));
       }
   });
 
-  // Almacenamiento disponible
   server.on("/api/storage", HTTP_GET, [](AsyncWebServerRequest *req) {
     JsonDocument doc;
     doc["system"]["total"] = SystemFS.totalBytes();
@@ -773,7 +830,7 @@ void setupAPI() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FACTORY RESET (Botón BOOT presionado 10s)
+// FACTORY RESET
 // ═══════════════════════════════════════════════════════════════
 unsigned long resetPressStart = 0;
 
@@ -784,7 +841,6 @@ void checkFactoryReset() {
     } else if (millis() - resetPressStart > 10000) {
       Serial.println("[RESET] Factory Reset activado — Limpiando datos...");
       setLED(CRGB::Red);
-      // Borrar toda la partición de datos
       File root = DataFS.open("/");
       File file = root.openNextFile();
       while (file) {
@@ -802,18 +858,101 @@ void checkFactoryReset() {
 // ═══════════════════════════════════════════════════════════════
 // SETUP
 // ═══════════════════════════════════════════════════════════════
+// --- MODO USB HÍBRIDO ---
+void runUsbExportMode() {
+  setLED(CRGB::Yellow);
+  Serial.println("[USB-MODE] Entrando en modo exportación...");
+  
+  if (!DataFS.begin(false, "/data", 10, "userdata")) {
+    Serial.println("[USB-MODE] Error montando DataFS");
+    blinkLED(CRGB::Red, 5, 200);
+    return;
+  }
+
+  unsigned long start = millis();
+  bool connected = false;
+  while (millis() - start < 30000) { 
+    if (usbHost.isConnected()) {
+      connected = true;
+      break;
+    }
+    blinkLED(CRGB::Blue, 1, 500);
+    Serial.println("[USB-MODE] Esperando pendrive...");
+  }
+
+  if (!connected) {
+    Serial.println("[USB-MODE] Timeout: No se detectó pendrive");
+    blinkLED(CRGB::Red, 3, 500);
+    return;
+  }
+
+  setLED(CRGB::Blue);
+  Serial.println("[USB-MODE] Pendrive detectado. Copiando archivos...");
+
+  File root = DataFS.open("/");
+  File file = root.openNextFile();
+  int count = 0;
+  
+  while (file) {
+    if (!file.isDirectory()) {
+      String fileName = String(file.name());
+      if (fileName.startsWith("exp_")) {
+        Serial.printf("[USB-MODE] Copiando %s...\n", fileName.c_str());
+        
+        String usbPath = "/usb/" + fileName;
+        FILE* fTo = fopen(usbPath.c_str(), "w");
+        if (fTo) {
+          uint8_t buf[512];
+          while (file.available()) {
+            size_t n = file.read(buf, sizeof(buf));
+            fwrite(buf, 1, n, fTo);
+          }
+          fclose(fTo);
+          count++;
+        }
+      }
+    }
+    file = root.openNextFile();
+  }
+
+  Serial.printf("[USB-MODE] Exportación completa: %d archivos.\n", count);
+  blinkLED(CRGB::Green, 3, 300);
+  delay(2000);
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(500);
-  Serial.println("\n╔══════════════════════════════════════════╗");
-  Serial.println("║   Physys Measurement System v1.0         ║");
-  Serial.println("║   ESP32-S3 WROOM-1 | N16R8 | QIO/QSPI   ║");
-  Serial.println("╚══════════════════════════════════════════╝");
+  
+  preferences.begin("physys", false);
+  String bootMode = preferences.getString("boot_mode", "normal");
+  
+  if (bootMode == "usb_export") {
+    preferences.putString("boot_mode", "normal");
+    preferences.end();
+    
+    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    
+    // Inicializar PSRAM para buffer de alta velocidad
+    if (psramInit()) {
+      highSpeedBuffer = (DataPoint*)ps_malloc(MAX_SAMPLES * sizeof(DataPoint));
+      if (highSpeedBuffer) {
+        Serial.printf("[PSRAM] Buffer de %d muestras reservado (%d KB)\n", 
+                      MAX_SAMPLES, (MAX_SAMPLES * sizeof(DataPoint)) / 1024);
+      }
+    }
+    
+    usbHost.begin();
+    
+    runUsbExportMode();
+    
+    Serial.println("[USB-MODE] Reiniciando a modo normal...");
+    ESP.restart();
+  }
+  preferences.end();
 
   // LED de estado
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(30);
-  setLED(CRGB::Yellow); // Amarillo = Inicializando
 
   // Botón Factory Reset
   pinMode(FACTORY_RESET_PIN, INPUT_PULLUP);
@@ -827,9 +966,8 @@ void setup() {
     Serial.println("[FS] ERROR: No se pudo montar partición SISTEMA");
   }
 
-  if (DataFS.begin(true, "/data", 10, "userdata")) {
-    Serial.printf("[FS] Datos (Experimentos): %d KB usados / %d KB total\n",
-                  DataFS.usedBytes() / 1024, DataFS.totalBytes() / 1024);
+  if (DataFS.begin(false, "/data", 10, "userdata")) {
+    Serial.println("[FS] Partición DATOS montada");
   } else {
     Serial.println("[FS] ERROR: No se pudo montar partición DATOS");
   }
@@ -837,33 +975,43 @@ void setup() {
   // Configuración persistente
   loadSettings();
 
-  // WiFi AP con sufijo MAC para evitar interferencias
-  Serial.println("\n[WiFi] Configurando AP...");
+  WiFi.mode(WIFI_AP);
+  
+  // Generar nombre con MAC después de activar el modo WiFi
   String macSuffix = WiFi.softAPmacAddress().substring(12);
   macSuffix.replace(":", "");
   String apName = "Physys-Lab-" + macSuffix;
   
-  WiFi.mode(WIFI_AP);
   WiFi.softAP(apName.c_str());
   delay(100);
   Serial.printf("[WiFi] AP '%s' activo en %s\n",
                 apName.c_str(), WiFi.softAPIP().toString().c_str());
 
+  // mDNS para facilitar acceso local
+  if (MDNS.begin("physyslab")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("[mDNS] Respondiendo en http://physyslab.local");
+  }
+
   // Portal Cautivo — DNS wildcard
   dnsServer.start(53, "*", WiFi.softAPIP());
   Serial.println("[DNS] Portal cautivo activo");
 
-  // USB Host MSC
-  Serial.println("[USB] Inicializando USB Host...");
-  usbHost.onConnected([]() { 
-    usbConnected = true; 
-    Serial.println("[USB] Pendrive conectado"); 
-  });
-  usbHost.onDisconnected([]() { 
-    usbConnected = false; 
-    Serial.println("[USB] Pendrive desconectado"); 
-  });
-  usbHost.begin();
+  // Si no se inicializó en modo USB, intentar aquí
+  if (!highSpeedBuffer && psramInit()) {
+    highSpeedBuffer = (DataPoint*)ps_malloc(MAX_SAMPLES * sizeof(DataPoint));
+    if (highSpeedBuffer) {
+      Serial.printf("[PSRAM] Buffer de alta velocidad listo: %d KB\n", (MAX_SAMPLES * sizeof(DataPoint)) / 1024);
+    }
+  }
+
+  // USB Host MSC (Modo Híbrido - Oficial Espressif)
+  if (usbHost.begin()) {
+    Serial.println("[USB] Stack oficial de Espressif inicializado.");
+  } else {
+    Serial.println("[USB] No se pudo inicializar el stack de Host (¿Conflicto con CDC?)");
+  }
+  usbConnected = false; 
 
   // Sensores
   Serial.println("\n[Sensores] Inicializando...");
@@ -882,25 +1030,26 @@ void setup() {
   });
   // Portal cautivo: redirigir cualquier host desconocido
   server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest *req) {
-    req->redirect("http://192.168.4.1/");
+    req->redirect("http://physyslab.local/");
   });
   server.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest *req) {
-    req->redirect("http://192.168.4.1/");
+    req->redirect("http://physyslab.local/");
   });
   server.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest *req) {
-    req->redirect("http://192.168.4.1/");
+    req->redirect("http://physyslab.local/");
   });
 
   // Archivos estáticos (CSS, JS, fuentes)
   server.serveStatic("/", SystemFS, "/www/").setDefaultFile("index.html");
 
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
   server.begin();
   Serial.println("\n[HTTP] Servidor activo en puerto 80");
 
   // Listo
-  setLED(CRGB::White); // Blanco = Sistema listo
+  setLED(CRGB(20, 20, 20)); // Blanco opaco = Sistema listo
   state.measurementStartTime = millis();
-  Serial.println("\n✓ Physys Lab listo. Conecta a WiFi 'Physys-Lab' → http://192.168.4.1");
+  Serial.println("\n✓ Physys Lab listo. Conecta a WiFi 'Physys-Lab' → http://physyslab.local");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -912,6 +1061,7 @@ void loop() {
   dnsServer.processNextRequest();
   ws.cleanupClients();
   checkFactoryReset();
+  usbConnected = usbHost.isConnected();
 
   readSensors();
 
@@ -919,14 +1069,8 @@ void loop() {
   if (millis() - lastBroadcast > sampleRateMs) {
     broadcastSensorData();
     
-    // Log a USB si está activo y midiendo
-    if (usbConnected && usbLogActive && state.measuring) {
-      char buffer[128];
-      snprintf(buffer, sizeof(buffer), "%lu,%.2f,%.2f,%.2f,%.2f,%.2f", 
-               millis(), state.lastDistance, state.lastVelocity, 
-               state.lastAngleDeg, state.angularVelRad, state.lastWeight);
-      usbHost.appendLog("log_realtime.csv", buffer);
-    }
+    // El log a USB ahora se hará mediante la función de exportación
+    // para evitar conflictos de hardware en tiempo real.
     
     lastBroadcast = millis();
   }

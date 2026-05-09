@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   Physys Lab v7.0 — App Controller
+   Physys Lab v8.0 — App Controller
    WebSocket Streaming + Canvas Chart + Tab Management
    Per-sensor controls + Time unit selector
    ═══════════════════════════════════════════════════════ */
@@ -111,6 +111,35 @@ function connectWS() {
                 currentChartStartTime = null;
                 chartData = [];
                 resetAngleState();
+                return;
+            }
+            
+            if (data.command === 'WAITING_TRIGGER') {
+                $('sys-status').textContent = 'Esperando movimiento...';
+                $('sys-status').style.color = '#f0b429';
+                $('btn-trigger').classList.add('recording');
+                $('btn-trigger').innerHTML = '🎯 Esperando...';
+                return;
+            }
+
+            if (data.command === 'TRIGGER_START') {
+                $('sys-status').textContent = 'Grabando (Auto)';
+                $('sys-status').style.color = '#14f0c5';
+                $('btn-trigger').innerHTML = '🎯 Grabando';
+                sensorRecording.TOF = true;
+                sensorData.TOF = [];
+                chartData = [];
+                currentChartStartTime = null;
+                return;
+            }
+
+            if (data.command === 'TRIGGER_STOP') {
+                $('sys-status').textContent = 'Fin de Carrera';
+                $('sys-status').style.color = '#a78bfa';
+                $('btn-trigger').classList.remove('recording');
+                $('btn-trigger').innerHTML = '🎯 Gatillo';
+                sensorRecording.TOF = false;
+                alert('Toma de muestra completada automáticamente.');
                 return;
             }
 
@@ -230,6 +259,10 @@ function updateDisplay(data) {
         if (data.config.hx_high_stab !== undefined) {
             if (hxStabEl) hxStabEl.checked = data.config.hx_high_stab;
             if (hxStabCfgEl) hxStabCfgEl.checked = data.config.hx_high_stab;
+        }
+
+        if (data.config.tube_length !== undefined && $('tube_length')) {
+            $('tube_length').value = data.config.tube_length;
         }
     }
 }
@@ -511,7 +544,7 @@ function prepareExportData(sensor) {
     const data = sensorData[sensor];
     return {
         device: 'Physys-Lab', 
-        version: 'v7.0', 
+        version: 'v8.0', 
         sensor: sensor,
         tab: tabConf ? tabConf.title : 'Desconocido',
         exported: new Date().toISOString(),
@@ -555,7 +588,7 @@ function toggleRecording() {
         if (recordedData.length > 0) {
             const autoExportData = {
                 device: 'Physys-Lab',
-                version: 'v7.0',
+                version: 'v8.0',
                 sensor: 'GLOBAL',
                 tab: 'Global Recording',
                 exported: new Date().toISOString(),
@@ -590,6 +623,29 @@ function toggleHxFilter() {
 function toggleHxStability() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send('TOGGLE_HX_STABILITY');
+    }
+}
+
+function toggleTriggerMode() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('START_TRIGGER');
+    }
+}
+
+function exportToUsb() {
+    if (confirm('¿Deseas exportar los datos al USB?\n\n1. El ESP32 se reiniciará.\n2. El LED parpadeará AZUL.\n3. Conecta el pendrive en ese momento.\n4. Cuando el LED parpadee VERDE, ya puedes retirarlo.')) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('USB_EXPORT');
+            alert('Reiniciando... El sistema entrará en modo copia en 3 segundos.');
+        } else {
+            alert('Error: No hay conexión con el dispositivo.');
+        }
+    }
+}
+
+function rebootESP() {
+    if (confirm('¿Deseas reiniciar el dispositivo?')) {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('REBOOT');
     }
 }
 
@@ -1342,6 +1398,21 @@ function rebootESP() {
     }
 }
 
+// ─── Trigger Mode ───
+function toggleTriggerMode() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('START_TRIGGER');
+    }
+}
+
+function setTubeLength() {
+    const len = $('tube_length').value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_TUBE:' + len);
+        alert('Largo del tubo ajustado a ' + len + ' mm');
+    }
+}
+
 // ─── Python Editor Logic ───
 function updateLineNumbers() {
     const editor = $('python-editor');
@@ -1482,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const titleEl = document.querySelector('.title-block h1');
             if (titleEl) {
                 titleEl.innerHTML = (cfg.lab_name || 'Physys Lab') +
-                    ' <span class="v-tag">' + (cfg.version || 'v7.0') + '</span>';
+                    ' <span class="v-tag">' + (cfg.version || 'v8.0') + '</span>';
             }
             if (cfg.lab_name) {
                 localStorage.setItem('physys_lab_name', cfg.lab_name);
