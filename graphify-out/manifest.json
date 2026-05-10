@@ -4,8 +4,8 @@
     "hash": "1314637e91fd0000d1548af1cb5ff07d"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\app.js": {
-    "mtime": 1778289188.7592618,
-    "hash": "772e142a2041c8bd3c5ade0ab8ea9a42"
+    "mtime": 1778355174.9329224,
+    "hash": "b34e16b8bfe41af3a8d35ac8ef286018"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\firebase-sync.js": {
     "mtime": 1777692504.4822254,
@@ -7128,36 +7128,40 @@
     "hash": "fff21a22f9f2914f7742a9350d17995a"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\sensor_logic.py": {
-    "mtime": 1773196011.360829,
-    "hash": "6d3236c7d17a9bd8ddc8a7a0d013d705"
+    "mtime": 1778212705.5427117,
+    "hash": "1314637e91fd0000d1548af1cb5ff07d"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\www\\app.js": {
-    "mtime": 1777721886.8799055,
-    "hash": "4843888bc7d0880e0c3cd7cc569b0ad3"
+    "mtime": 1778302782.0191426,
+    "hash": "eb02871b968cf134b004f667772e30ba"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\www\\firebase-sync.js": {
     "mtime": 1777692504.4822254,
     "hash": "b2ad730493253173dd5425a9f37565a4"
   },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\www\\source.cpp": {
+    "mtime": 1778218113.282525,
+    "hash": "3962a823f7bd080f031b29581e2af97b"
+  },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\www\\sw.js": {
-    "mtime": 1777692472.934431,
-    "hash": "6fe0cfab4f3a5372a8b9ddef225b6ed0"
+    "mtime": 1778219271.4508095,
+    "hash": "5be15f5c7af32f621e13c71edfb2ce3b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\src\\main.cpp": {
-    "mtime": 1777721877.3176322,
-    "hash": "6e9080ce283c578ccc3d0afa59eaa521"
+    "mtime": 1778302782.025884,
+    "hash": "0d22089a08e8ddba62e6880e51be96e6"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\src\\UsbHostMSC.h": {
-    "mtime": 1777660123.868606,
-    "hash": "b243a3bfe24681ef85c822347d4bb7e1"
+    "mtime": 1778216307.0766368,
+    "hash": "1e9d0b024672e42ba58d88d312a372ea"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\scratch\\extract_ast.py": {
-    "mtime": 1778290070.371172,
-    "hash": "d8342ab053765aac9b81340ed7198f38"
+    "mtime": 1778290614.5851738,
+    "hash": "ca91335a535f5c41a1f4a50a32b57b7b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\src\\main.cpp": {
-    "mtime": 1778289150.468526,
-    "hash": "914ecdfca140cec3cc552f70796d429c"
+    "mtime": 1778354418.4934714,
+    "hash": "32963b0ec6fd7bd549c2ac39b30ca99f"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\src\\UsbHostMSC.h": {
     "mtime": 1778216307.0766368,
@@ -7208,8 +7212,8 @@
     "hash": "96536bbd6c989de9519e493df2025f0b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\index.html": {
-    "mtime": 1778289186.751499,
-    "hash": "385af2dd2569c620b7e0698353bd1056"
+    "mtime": 1778354293.3169641,
+    "hash": "188c767c58ea4d370b1d83ab434701d0"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\adafruit-circuitpython-bundle-10.x-mpy-20250911\\README.txt": {
     "mtime": 1757600019.1046712,
@@ -9011,6 +9015,10 @@
     "mtime": 1778289605.7278614,
     "hash": "5874b36c4899ef03cbbfd4f06bda737d"
   },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\Indice_Arbol_Aprendizaje.md": {
+    "mtime": 1778290641.2520418,
+    "hash": "8e73268468b1bceaf0a9ea42b038eafd"
+  },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\Laboratorio de Bolsillo Antigravity v5.md": {
     "mtime": 1773115640.8433123,
     "hash": "713b58a958784d54488d8e2ac63beac1"
@@ -9018,6 +9026,10 @@
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\LISTADO_CRONOLOGICO_PETICIONES_NELSON.md": {
     "mtime": 1773273109.036119,
     "hash": "6d4a6979d8ef3867c3466a5314334620"
+  },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\MANUAL_DE_INSTRUCCIONES.md": {
+    "mtime": 1778292903.9066546,
+    "hash": "e01a8584ff56581a103241b5b6c4d0ce"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\Mapa_Proyecto_GraphyFYY.md": {
     "mtime": 1778289777.917841,
@@ -9043,6 +9055,10 @@
     "mtime": 1777860198.0936027,
     "hash": "da6baa7e7d47472f8f9605041b244083"
   },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\PLAN_UX_SIMPLIFICACION.md": {
+    "mtime": 1778354577.8875332,
+    "hash": "777db735b88c5ce06a831799d930afb5"
+  },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Planes_AI\\project_architecture.md": {
     "mtime": 1777951499.2681248,
     "hash": "090b23d4cca9b4c1cc9fead1415eee94"
@@ -9060,12 +9076,16 @@
     "hash": "22e53af55119a0b2f01ac3d357f50042"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\data\\www\\index.html": {
-    "mtime": 1777693307.6810944,
-    "hash": "b97d76860818680687128576618d8164"
+    "mtime": 1778302782.0191426,
+    "hash": "18cf7bee75d8fc132c4f6f8ad46517d4"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\include\\Physys System Plan.md": {
     "mtime": 1773151745.9541633,
     "hash": "7d27475d20604386b0877373b44a3ef0"
+  },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\produccion\\src\\idf_component.yml": {
+    "mtime": 1778216011.39533,
+    "hash": "87f65b91f9a32570373d09b0fb92c216"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\src\\idf_component.yml": {
     "mtime": 1778216011.39533,
