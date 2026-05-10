@@ -1537,7 +1537,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Action buttons
     $('btn-record').addEventListener('click', toggleRecording);
-    $('btn-export').addEventListener('click', openExportModal);
+    $('btn-export').addEventListener('click', exportJSON);
 
     // Python editor events
     if ($('example-select')) $('example-select').addEventListener('change', (e) => {
