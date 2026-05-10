@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════
-   Physys Lab v8.0 — App Controller
-   WebSocket Streaming + Canvas Chart + Tab Management
-   Per-sensor controls + Time unit selector
+   Physys Lab v9.0 — App Controller
+   WebSocket Streaming + Canvas Chart + Sensor Dropdown
+   Per-sensor controls + Time unit selector + Export modal
    ═══════════════════════════════════════════════════════ */
 
 // ─── Tab Definitions ───
@@ -67,6 +67,7 @@ function timeUnitLabel() {
 
 // ─── State ───
 let currentTab = 'movimiento';
+let lastSensorTab = 'movimiento';
 let selectedVariable = 'dist';
 let ws = null;
 let isRecording = false;
@@ -547,7 +548,7 @@ function prepareExportData(sensor) {
     const data = sensorData[sensor];
     return {
         device: 'Physys-Lab', 
-        version: 'v8.0', 
+        version: 'v9.0', 
         sensor: sensor,
         tab: tabConf ? tabConf.title : 'Desconocido',
         exported: new Date().toISOString(),
@@ -591,7 +592,7 @@ function toggleRecording() {
         if (recordedData.length > 0) {
             const autoExportData = {
                 device: 'Physys-Lab',
-                version: 'v8.0',
+                version: 'v9.0',
                 sensor: 'GLOBAL',
                 tab: 'Global Recording',
                 exported: new Date().toISOString(),
@@ -1214,8 +1215,7 @@ function stopGpioPolling() {
     gvActive = false;
 }
 
-// ─── Tab Switch Extended (Python + GPIO + Config) ───
-// Combinamos las lógicas para evitar bloqueos y asegurar que main-layout se muestre/oculte correctamente
+// ─── Tab Switch (Sensor Dropdown + Icon Nav) ───
 function switchTab(tabName) {
     try {
         currentTab = tabName;
@@ -1234,10 +1234,18 @@ function switchTab(tabName) {
         
         stopGpioPolling();
 
-        // Update active tab button
-        $$('.tab-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tab === tabName);
-        });
+        // Sync nav icon active states
+        const cfgBtn = $('btn-nav-config');
+        const gpioBtn = $('btn-nav-gpio');
+        if (cfgBtn) cfgBtn.classList.toggle('active', tabName === 'config');
+        if (gpioBtn) gpioBtn.classList.toggle('active', tabName === 'gpioview');
+
+        // Sync sensor dropdown
+        const sensorSelect = $('sensor-select');
+        if (sensorSelect && ['movimiento', 'rotacion', 'fuerza'].includes(tabName)) {
+            sensorSelect.value = tabName;
+            lastSensorTab = tabName;
+        }
 
         if (tabName === 'python') {
             if (pythonPanel) pythonPanel.style.display = 'block';
@@ -1285,17 +1293,20 @@ function switchTab(tabName) {
             const invertBtn = $('btn-sensor-invert');
             const resetEncBtn = $('btn-sensor-reset-enc');
             const tareBtn = $('btn-sensor-tare');
-            const filterCont = $('hx-filter-container');
+            const hxControls = $('hx-controls-container');
 
             if (invertBtn) invertBtn.style.display = (tabName === 'rotacion') ? '' : 'none';
             if (resetEncBtn) resetEncBtn.style.display = (tabName === 'rotacion') ? '' : 'none';
             if (tareBtn) tareBtn.style.display = (tabName === 'fuerza') ? '' : 'none';
-            if (filterCont) filterCont.style.display = (tabName === 'fuerza') ? 'flex' : 'none';
+            if (hxControls) hxControls.style.display = (tabName === 'fuerza') ? 'flex' : 'none';
             
             // Update display with last data if available
             if (Object.keys(lastData).length > 0) {
                 updateDisplay(lastData);
             }
+            
+            // Force chart redraw after panel switch
+            setTimeout(drawChart, 50);
         }
         
         console.log('[Tab] switched to:', tabName);
@@ -1306,6 +1317,90 @@ function switchTab(tabName) {
         const mainLayout = document.querySelector('.main-layout');
         if (mainLayout) mainLayout.style.display = '';
     }
+}
+
+// ─── Consolidated Save All Config ───
+function saveAllConfig() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { alert('Sin conexión'); return; }
+    const model = $('tof_model').value;
+    const rate = $('sample_rate').value;
+    const tube = $('tube_length') ? $('tube_length').value : '0';
+    ws.send('SET_TOF:' + model);
+    ws.send('SET_RATE:' + rate);
+    ws.send('SET_TUBE:' + tube);
+    const btn = $('btn-save-config');
+    if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = '💾 Guardar Configuración'; }, 2000); }
+    alert('Configuración guardada (ToF: ' + model + ', Freq: ' + (1000/rate).toFixed(0) + ' Hz, Tubo: ' + tube + ' mm).\n\nSe aplicará tras reinicio si cambió el sensor ToF.');
+}
+
+// ─── Export Modal (unified: CSV, JSON, USB, Share) ───
+function openExportModal() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const sensor = tabConf ? tabConf.sensor : null;
+    const data = sensor ? sensorData[sensor] : [];
+    const count = data.length;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;justify-content:center;align-items:center;z-index:9999;backdrop-filter:blur(4px)';
+
+    const modal = document.createElement('div');
+    modal.className = 'glass-card';
+    modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:16px;width:90%;max-width:400px;color:#fff;box-shadow:0 20px 50px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1)';
+
+    const title = document.createElement('h3');
+    title.textContent = '📤 Exportar Datos';
+    title.style.cssText = 'margin:0 0 6px 0;color:#f0b429';
+    modal.appendChild(title);
+
+    const info = document.createElement('p');
+    info.style.cssText = 'font-size:13px;color:#94a3b8;margin-bottom:18px';
+    info.textContent = tabConf ? tabConf.title + ' — ' + count + ' muestras' : 'Sin sensor activo';
+    modal.appendChild(info);
+
+    function mkBtn(label, color, fn) {
+        const b = document.createElement('button');
+        b.innerHTML = label;
+        b.className = 'btn-action';
+        b.style.cssText = 'width:100%;padding:13px;margin-bottom:10px;background:' + color + ';border-color:' + color + ';color:#fff;font-size:14px;border-radius:10px';
+        b.onclick = fn;
+        modal.appendChild(b);
+    }
+
+    if (count > 0) {
+        mkBtn('📊 Exportar CSV', '#14f0c5', () => { overlay.remove(); exportSensorCSV(); });
+        mkBtn('📋 Exportar JSON', '#f0b429', () => { overlay.remove(); exportJSON(); });
+    }
+
+    if (navigator.share && count > 0) {
+        mkBtn('🔗 Compartir', '#0ea5e9', () => {
+            const exportData = prepareExportData(sensor);
+            const file = new File([JSON.stringify(exportData, null, 2)], 'physys_' + sensor + '.json', { type: 'application/json' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
+            }
+            overlay.remove();
+        });
+    }
+
+    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
+
+    if (count === 0) {
+        const warn = document.createElement('p');
+        warn.style.cssText = 'font-size:12px;color:#f0b429;text-align:center;margin-bottom:12px';
+        warn.textContent = '⚠️ Graba datos primero con el botón Medir para exportar CSV/JSON.';
+        modal.insertBefore(warn, modal.querySelector('.btn-action'));
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'btn-action';
+    closeBtn.style.cssText = 'width:100%;padding:10px;margin-top:4px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px';
+    closeBtn.onclick = () => overlay.remove();
+    modal.appendChild(closeBtn);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
 }
 
 function fetchConfig() {
@@ -1492,9 +1587,28 @@ function setEditorStatus(msg, cls) {
 
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
-    // Tab buttons
-    $$('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    // Sensor dropdown — use 'input' + track mousedown for reselection
+    const sensorSelect = $('sensor-select');
+    if (sensorSelect) {
+        sensorSelect.addEventListener('change', (e) => switchTab(e.target.value));
+        // Allow re-selecting the same sensor (e.g., to return from config)
+        let dropdownOpened = false;
+        sensorSelect.addEventListener('focus', () => { dropdownOpened = true; });
+        sensorSelect.addEventListener('blur', () => {
+            if (dropdownOpened && !['movimiento','rotacion','fuerza'].includes(currentTab)) {
+                // User opened dropdown while in config/gpio — switch to selected sensor
+                switchTab(sensorSelect.value);
+            }
+            dropdownOpened = false;
+        });
+    }
+
+    // Nav icon buttons — toggle behavior (click again = go back)
+    if ($('btn-nav-config')) $('btn-nav-config').addEventListener('click', () => {
+        switchTab(currentTab === 'config' ? lastSensorTab : 'config');
+    });
+    if ($('btn-nav-gpio')) $('btn-nav-gpio').addEventListener('click', () => {
+        switchTab(currentTab === 'gpioview' ? lastSensorTab : 'gpioview');
     });
 
     // Variable selector
@@ -1505,8 +1619,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Action buttons
     $('btn-record').addEventListener('click', toggleRecording);
-    $('btn-export').addEventListener('click', exportJSON);
-    $('btn-save').addEventListener('click', toggleLowPower);
+    $('btn-export').addEventListener('click', openExportModal);
 
     // Python editor events
     if ($('example-select')) $('example-select').addEventListener('change', (e) => {
@@ -1564,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const titleEl = document.querySelector('.title-block h1');
             if (titleEl) {
                 titleEl.innerHTML = (cfg.lab_name || 'Physys Lab') +
-                    ' <span class="v-tag">' + (cfg.version || 'v8.0') + '</span>';
+                    ' <span class="v-tag">' + (cfg.version || 'v9.0') + '</span>';
             }
             if (cfg.lab_name) {
                 localStorage.setItem('physys_lab_name', cfg.lab_name);

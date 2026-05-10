@@ -654,7 +654,7 @@ void setupAPI() {
     if (SystemFS.exists("/config.json")) {
       req->send(SystemFS, "/config.json", "application/json");
     } else {
-      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab — UMNG\",\"version\":\"v8.0\"}");
+      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab — UMNG\",\"version\":\"v9.0\"}");
     }
   });
 
