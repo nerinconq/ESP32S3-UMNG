@@ -4,8 +4,8 @@
     "hash": "1314637e91fd0000d1548af1cb5ff07d"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\app.js": {
-    "mtime": 1778355174.9329224,
-    "hash": "b34e16b8bfe41af3a8d35ac8ef286018"
+    "mtime": 1778513816.05541,
+    "hash": "7ba0f6e55b294688d44725411075099c"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\firebase-sync.js": {
     "mtime": 1777692504.4822254,
@@ -16,8 +16,8 @@
     "hash": "3962a823f7bd080f031b29581e2af97b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\sw.js": {
-    "mtime": 1778219271.4508095,
-    "hash": "5be15f5c7af32f621e13c71edfb2ce3b"
+    "mtime": 1778528507.096925,
+    "hash": "e9b2979c1b698dec9982b6937b74d93b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\adafruit-circuitpython-bundle-10.x-mpy-20250911\\examples\\24lc32\\24lc32_simpletest.py": {
     "mtime": 1757600025.2166219,
@@ -7160,8 +7160,8 @@
     "hash": "ca91335a535f5c41a1f4a50a32b57b7b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\src\\main.cpp": {
-    "mtime": 1778354418.4934714,
-    "hash": "32963b0ec6fd7bd549c2ac39b30ca99f"
+    "mtime": 1778527396.847828,
+    "hash": "35175febdfda84037a580dc4f2e730d1"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\src\\UsbHostMSC.h": {
     "mtime": 1778216307.0766368,
@@ -7212,8 +7212,8 @@
     "hash": "96536bbd6c989de9519e493df2025f0b"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\index.html": {
-    "mtime": 1778354293.3169641,
-    "hash": "188c767c58ea4d370b1d83ab434701d0"
+    "mtime": 1778513704.2572238,
+    "hash": "29ecdd2da950079315db42a97d068e8a"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\adafruit-circuitpython-bundle-10.x-mpy-20250911\\README.txt": {
     "mtime": 1757600019.1046712,
@@ -9182,6 +9182,14 @@
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\Python\\Python_Tutorial.pdf": {
     "mtime": 1755659725.0,
     "hash": "702582efa02be831024aa7a4ff1a29af"
+  },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\umng.png": {
+    "mtime": 1778515547.9255943,
+    "hash": "c35055d83b7b8282a8d1d343ae17ed1e"
+  },
+  "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\data\\www\\umng.png": {
+    "mtime": 1778515547.9255943,
+    "hash": "c35055d83b7b8282a8d1d343ae17ed1e"
   },
   "C:\\Users\\nelso\\Documents\\A_UMNG\\ESP32S3 PHYSYS LAB\\Freenove_Ultimate_Starter_Kit_for_ESP32_S3-main\\adafruit-circuitpython-bundle-10.x-mpy-20250911\\examples\\74hc595\\74hc595_daisy_chain\\figs\\ItsyBitsyM0_w_LEDs_and_two_shift_registers.gif": {
     "mtime": 1757600022.9325068,
