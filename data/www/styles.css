@@ -92,8 +92,13 @@ body {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+    background-color: #1e293b;
+    background-image: url('umng.png');
+    background-size: cover;
+    background-position: center;
+    border: 3px solid var(--accent-cyan);
     flex-shrink: 0;
+    transition: border-color 0.3s, box-shadow 0.3s;
 }
 .pulse {
     animation: pulse-ring 2s ease-out infinite;

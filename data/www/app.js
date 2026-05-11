@@ -83,20 +83,32 @@ let lastDrawTime = 0; // Para throttling de dibujo
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
+// ─── Status Semaphore (Sync with Logo) ───
+function setStatus(text, color) {
+    const statusEl = $('sys-status');
+    const logoEl = $('sys-logo');
+    if (statusEl) {
+        statusEl.textContent = text;
+        statusEl.style.color = color;
+    }
+    if (logoEl) {
+        logoEl.style.borderColor = color;
+        logoEl.style.boxShadow = `0 0 15px ${color}66`; // 66 adds alpha to the hex
+    }
+}
+
 // ─── WebSocket Connection ───
 function connectWS() {
     const host = location.hostname || '192.168.4.1';
     ws = new WebSocket('ws://' + host + '/ws');
 
     ws.onopen = () => {
-        $('sys-status').textContent = 'Conectado';
-        $('sys-status').style.color = '#14f0c5';
+        setStatus('Conectado', '#14f0c5');
         updateSensorBadges({ tof: true, encoder: true, loadcell: true });
     };
 
     ws.onclose = () => {
-        $('sys-status').textContent = 'Desconectado — Reconectando...';
-        $('sys-status').style.color = '#ff4d6a';
+        setStatus('Desconectado — Reconectando...', '#ff4d6a');
         setTimeout(connectWS, 2000);
     };
 
@@ -116,8 +128,7 @@ function connectWS() {
             }
             
             if (data.command === 'WAITING_TRIGGER') {
-                $('sys-status').textContent = 'Esperando movimiento...';
-                $('sys-status').style.color = '#f0b429';
+                setStatus('Esperando movimiento...', '#f0b429');
                 $('btn-trigger').classList.add('recording');
                 $('btn-trigger').innerHTML = '🎯 Esperando...';
                 $('btn-trigger').style.display = 'none';
@@ -126,8 +137,7 @@ function connectWS() {
             }
 
             if (data.command === 'TRIGGER_START') {
-                $('sys-status').textContent = 'Grabando (Auto)';
-                $('sys-status').style.color = '#14f0c5';
+                setStatus('Grabando (Auto)', '#ff4d6a'); // Cambiado a rojo para grabar
                 $('btn-trigger-stop').innerHTML = '⏹ Grabando...';
                 sensorRecording.TOF = true;
                 sensorData.TOF = [];
@@ -137,13 +147,28 @@ function connectWS() {
             }
 
             if (data.command === 'TRIGGER_STOP') {
-                $('sys-status').textContent = 'Toma completa';
-                $('sys-status').style.color = '#a78bfa';
+                setStatus('Toma completa', '#a78bfa');
                 $('btn-trigger').classList.remove('recording');
                 $('btn-trigger').innerHTML = '🎯 Toma Auto';
                 $('btn-trigger').style.display = '';
                 $('btn-trigger-stop').style.display = 'none';
-                sensorRecording.TOF = false;
+                
+                ['TOF', 'ENC', 'HX'].forEach(s => sensorRecording[s] = false);
+                
+                const btnRec = $('btn-sensor-rec');
+                if (btnRec) {
+                    btnRec.classList.remove('recording');
+                    btnRec.innerHTML = '<span class="dot"></span> ▶️ Medir';
+                }
+                
+                if (isRecording) {
+                    isRecording = false;
+                    const gBtn = $('btn-record');
+                    if (gBtn) {
+                        gBtn.classList.remove('recording');
+                        gBtn.innerHTML = '<span class="dot"></span> Grabar';
+                    }
+                }
                 return;
             }
 
@@ -265,8 +290,13 @@ function updateDisplay(data) {
             if (hxStabCfgEl) hxStabCfgEl.checked = data.config.hx_high_stab;
         }
 
-        if (data.config.tube_length !== undefined && $('tube_length')) {
-            $('tube_length').value = data.config.tube_length;
+        if (data.config.tube_length !== undefined) {
+            if ($('tube_length') && document.activeElement !== $('tube_length')) {
+                $('tube_length').value = data.config.tube_length;
+            }
+            if ($('auto-stop-dist') && document.activeElement !== $('auto-stop-dist')) {
+                $('auto-stop-dist').value = data.config.tube_length;
+            }
         }
     }
 }
@@ -416,10 +446,12 @@ function toggleSensorRecording() {
         currentChartStartTime = null; 
         btn.classList.add('recording');
         btn.innerHTML = '<span class="dot"></span> ⏹ Detener';
+        setStatus('Midiendo...', '#ff4d6a'); // Rojo para medir
         if (ws && ws.readyState === WebSocket.OPEN) ws.send('START_' + sensor);
     } else {
         btn.classList.remove('recording');
         btn.innerHTML = '<span class="dot"></span> ▶️ Medir';
+        setStatus('Conectado', '#14f0c5');
         if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP_' + sensor);
         
         // Auto-save to IndexedDB for offline sync (H5)
@@ -500,10 +532,12 @@ function toggleRecording() {
         currentChartStartTime = null;
         btn.classList.add('recording');
         btn.innerHTML = '<span class="dot"></span> Grabando...';
+        setStatus('Grabando...', '#ff4d6a');
         if (ws && ws.readyState === WebSocket.OPEN) ws.send('START');
     } else {
         btn.classList.remove('recording');
         btn.innerHTML = '<span class="dot"></span> Grabar';
+        setStatus('Conectado', '#14f0c5');
         if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP');
 
         // Auto-save global recording to IndexedDB (H5)
@@ -1246,6 +1280,7 @@ function saveAllConfig() {
     ws.send('SET_TOF:' + model);
     ws.send('SET_RATE:' + rate);
     ws.send('SET_TUBE:' + tube);
+    if ($('auto-stop-dist')) $('auto-stop-dist').value = tube; // Sincronizar visualmente
     const btn = $('btn-save-config');
     if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = '💾 Guardar Configuración'; }, 2000); }
     alert('Configuración guardada (ToF: ' + model + ', Freq: ' + (1000/rate).toFixed(0) + ' Hz, Tubo: ' + tube + ' mm).\n\nSe aplicará tras reinicio si cambió el sensor ToF.');
@@ -1339,6 +1374,13 @@ function fetchConfig() {
 
                 if (data.config.hx_high_stab !== undefined && $('config-hx-stability-check')) {
                     $('config-hx-stability-check').checked = data.config.hx_high_stab;
+                }
+                if (data.config.tube_length !== undefined) {
+                    if ($('tube_length')) $('tube_length').value = data.config.tube_length;
+                    if ($('auto-stop-dist')) $('auto-stop-dist').value = data.config.tube_length;
+                }
+                if (data.config.tof_range !== undefined && $('tof_range')) {
+                    $('tof_range').value = data.config.tof_range;
                 }
             }
             const sensors = data.sensors || {};
@@ -1601,7 +1643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('physys_lab_name', cfg.lab_name);
             }
             if (cfg.institution) {
-                $('sys-status').textContent = cfg.institution_short || cfg.institution;
+                setStatus(cfg.institution_short || cfg.institution, '#14f0c5');
                 localStorage.setItem('physys_institution', cfg.institution);
             }
         })

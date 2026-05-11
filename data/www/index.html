@@ -14,7 +14,7 @@
         <!-- HEADER -->
         <header class="app-header">
             <div class="header-left">
-                <div class="logo-circle pulse"></div>
+                <div class="logo-circle pulse" id="sys-logo"></div>
                 <div class="title-block">
                     <h1>Physys Lab <span class="v-tag">v9.0</span></h1>
                     <span class="subtitle" id="sys-status">Conectando...</span>
@@ -186,6 +186,11 @@
                                 <option value="vl53l1xv2">VL53L1X v2 (Largo alcance — 4m)</option>
                                 <option value="vl6180">VL6180X (Corto alcance — 60cm)</option>
                                 <option value="vl53l5x">VL53L5CX (Multizona — 8x8)</option>
+                            </select>
+                            <h3 style="margin-top:15px">Perfil de Alcance (Solo VL53L0X)</h3>
+                            <select id="tof_range" class="select-premium full-width">
+                                <option value="short" selected>Corto Alcance (Default ~1.2m)</option>
+                                <option value="long">Largo Alcance (Avanzado ~2.0m)</option>
                             </select>
                             <h3 style="margin-top:15px">Frecuencia de Muestreo</h3>
                             <select id="sample_rate" class="select-premium full-width">

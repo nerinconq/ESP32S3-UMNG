@@ -138,6 +138,7 @@ struct SystemState {
   float triggerThreshold = 2.0;  // mm (Zona muerta)
   float distMin = 30.0;
   float distMax = 2000.0;
+  String tofRange = "short";    // Perfil VL53L0X: "short" o "long"
   
   unsigned long lastSampleTime = 0;
   unsigned long measurementStartTime = 0;
@@ -181,6 +182,7 @@ void loadSettings() {
   state.invertEncoder = preferences.getBool("inv_enc", false);
   state.useHxFilter = preferences.getBool("hx_filter", true);
   state.hxHighStability = preferences.getBool("hx_high_stab", false);
+  state.tofRange = preferences.getString("tof_range", "short");
   preferences.end();
   
   // Validaciones de seguridad - Forzar 10ms (100Hz) si no es válido o es la primera vez
@@ -242,12 +244,25 @@ void initSensors() {
     case MODEL_L0X:
       tof0X.setBus(&I2C_TOF);
       if (tof0X.init()) {
+        if (state.tofRange == "long") {
+            // Habilitar perfil "Long Range" para alcanzar 2 metros
+            tof0X.setSignalRateLimit(0.1);
+            tof0X.setVcselPulsePeriod(VL53L0X::VcselPeriodPreRange, 18);
+            tof0X.setVcselPulsePeriod(VL53L0X::VcselPeriodFinalRange, 14);
+        }
+
         uint32_t budget = (sampleRateMs * 1000) - 2000;
-        if (budget < 10000) budget = 10000; 
+        if (state.tofRange == "long") {
+            // Mínimo recomendado para long range es 33000us, pero forzaremos mínimo 20000us para estabilidad
+            if (budget < 20000) budget = 20000; 
+        } else {
+            if (budget < 10000) budget = 10000;
+        }
+        
         tof0X.setMeasurementTimingBudget(budget);
         tof0X.startContinuous(sampleRateMs);
         state.tofReady = true;
-        Serial.printf("[OK] VL53L0X (ToF) inicializado a %d ms\n", sampleRateMs);
+        Serial.printf("[OK] VL53L0X (ToF) inicializado a %d ms (Modo %s)\n", sampleRateMs, state.tofRange == "long" ? "Long Range" : "Short Range");
       }
       break;
     case MODEL_L1X:
@@ -363,8 +378,36 @@ void readSensors() {
           Serial.println("[AUTO] ¡Movimiento detectado! Iniciando registro automático.");
         }
       } 
-      else if (state.triggerEnabled && state.measuring && state.tubeLength > 0) {
-        if (state.lastDistance >= state.tubeLength) {
+      else if (state.measuring) {
+        float stopDist = state.distMax; // Por defecto detener en el máximo del sensor (ej. 2000mm)
+        if (state.triggerEnabled && state.tubeLength > 0) {
+          stopDist = state.tubeLength; // Si hay longitud de tubo configurada y toma auto, usarla
+        }
+        
+        bool shouldStop = false;
+        
+        // 1. Si el movimiento inicia por debajo del límite, detener al cruzar el límite hacia arriba
+        if (state.initialDistance < stopDist) {
+            if (state.lastDistance >= stopDist) {
+                shouldStop = true;
+                Serial.printf("[AUTO] Límite superior alcanzado (%.1f >= %.1f). Deteniendo.\n", state.lastDistance, stopDist);
+            }
+        } 
+        // 2. Si el movimiento inicia por encima del límite (ej. caída libre hacia el sensor), detener en la zona muerta
+        else {
+            if (state.lastDistance <= state.distMin) {
+                shouldStop = true;
+                Serial.printf("[AUTO] Zona muerta alcanzada (%.1f <= %.1f). Deteniendo.\n", state.lastDistance, state.distMin);
+            }
+        }
+        
+        // 3. Condición de seguridad universal: si llega al máximo físico del sensor, detener
+        if (!shouldStop && state.lastDistance >= state.distMax) {
+            shouldStop = true;
+            Serial.printf("[AUTO] Límite máximo físico del sensor alcanzado (%.1f). Deteniendo.\n", state.lastDistance);
+        }
+        
+        if (shouldStop) {
           state.measuring = false;
           state.triggerEnabled = false;
           state.tofMeasure.active = false;
@@ -374,7 +417,6 @@ void readSensors() {
           blinkLED(CRGB::Green, 3, 150);
           setLED(CRGB(20, 20, 20));
           ws.textAll("{\"command\":\"TRIGGER_STOP\"}");
-          Serial.printf("[AUTO] Fin de carrera alcanzado (%.1f mm). Deteniendo registro.\n", state.lastDistance);
         }
       }
 
@@ -474,6 +516,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     if (msg == "START") {
       state.measuring = true;
       state.measurementStartTime = millis();
+      state.initialDistance = state.lastDistance;
       state.tofMeasure.active = true;
       state.encMeasure.active = true;
       state.hxMeasure.active = true;
@@ -505,7 +548,14 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       state.tubeLength = msg.substring(9).toFloat();
       Serial.printf("[CMD] Largo del tubo ajustado a: %.1f mm\n", state.tubeLength);
     }
-    else if (msg == "START_TOF") { state.tofMeasure.active = true; state.measuring = true; state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
+    else if (msg.startsWith("SET_TOF_RANGE:")) {
+      state.tofRange = msg.substring(14);
+      preferences.begin("physys", false);
+      preferences.putString("tof_range", state.tofRange);
+      preferences.end();
+      Serial.printf("[CMD] Perfil de alcance ToF ajustado a: %s\n", state.tofRange.c_str());
+    }
+    else if (msg == "START_TOF") { state.initialDistance = state.lastDistance; state.tofMeasure.active = true; state.measuring = true; state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
     else if (msg == "STOP_TOF")  { state.tofMeasure.active = false; checkGlobalStop(); }
     else if (msg == "START_ENC") { 
       state.encMeasure.active = true; 
@@ -619,6 +669,8 @@ void broadcastSensorData() {
   doc["config"]["sample_rate"] = sampleRateMs;
   doc["config"]["hx_filter"] = state.useHxFilter;
   doc["config"]["hx_high_stab"] = state.hxHighStability;
+  doc["config"]["tube_length"] = state.tubeLength;
+  doc["config"]["tof_range"] = state.tofRange;
 
   String json;
   serializeJson(doc, json);
@@ -645,6 +697,8 @@ void setupAPI() {
     doc["config"]["invert_encoder"] = state.invertEncoder;
     doc["config"]["hx_filter"] = state.useHxFilter;
     doc["config"]["hx_high_stab"] = state.hxHighStability;
+    doc["config"]["tube_length"] = state.tubeLength;
+    doc["config"]["tof_range"] = state.tofRange;
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
