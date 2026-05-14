@@ -942,26 +942,28 @@ function saveSampleRate() {
     }
 }
 
-// ─── Clear sensor data ───
-function clearSensorData() {
+// ─── Clear Local (Browser) data ───
+function clearLocalData() {
     const tabConf = TAB_CONFIG[currentTab];
     if (!tabConf || !tabConf.sensor) return;
     const sensor = tabConf.sensor;
-    if (!confirm('¿Limpiar ' + sensorData[sensor].length + ' muestras de ' + tabConf.title + '?')) return;
+    if (!confirm('¿Limpiar gráfica y borrar ' + (sensorData[sensor] ? sensorData[sensor].length : 0) + ' muestras de pantalla?')) return;
     sensorData[sensor] = [];
-    recordedData = []; // Clear global recorded data to avoid confusion
     chartData = [];
     updateSensorCount();
     drawChart();
 }
 
-// ─── Clear ESP32 memory ───
-function clearESP32Data() {
-    if (!confirm('¿Borrar TODOS los datos del ESP32? Los datos se perderán permanentemente.')) return;
+// ─── Clear ESP32 memory (Internal Flash) ───
+function clearEspFiles() {
+    if (!confirm('¿Borrar permanentemente TODOS los archivos de experimentos guardados en la memoria interna del ESP32?')) return;
     fetch('/api/data/clear', { method: 'DELETE' })
         .then(r => r.json())
-        .then(d => { alert('✓ ' + d.deleted + ' archivos eliminados. Memoria libre: ' + (d.free/1024).toFixed(0) + ' KB'); fetchSystemInfo(); })
-        .catch(e => alert('Error: ' + e.message));
+        .then(d => { 
+            alert('✓ ' + d.deleted + ' archivos eliminados.\nMemoria libre: ' + (d.free/1024).toFixed(0) + ' KB'); 
+            fetchSystemInfo(); 
+        })
+        .catch(e => alert('Error al borrar archivos: ' + e.message));
 }
 
 // ─── Low Power Mode ───
@@ -1382,6 +1384,7 @@ function fetchConfig() {
                 if (data.config.tof_range !== undefined && $('tof_range')) {
                     $('tof_range').value = data.config.tof_range;
                 }
+                updateToFUI();
             }
             const sensors = data.sensors || {};
             updateUsbUI(sensors.usb, sensors.usb ? 'Pendrive Conectado' : 'No detectado');
@@ -1545,6 +1548,53 @@ function setEditorStatus(msg, cls) {
     el.className = 'editor-status' + (cls ? ' ' + cls : '');
 }
 
+// ─── ToF UI Helpers ───
+const TOF_INFO = {
+    'vl53l0x': 'Alcance hasta 2.0m. Resolución 1mm. Zona muerta: <30mm. Ideal para rieles de aire y caída libre.',
+    'vl53l1x': 'Alcance hasta 4.0m. Resolución 1mm. Zona muerta: <40mm. Resistente a luz ambiental intensa.',
+    'vl53l1xv2': 'VL53L1X v2 optimizado. Zona muerta: <40mm. Mejor precisión a larga distancia.',
+    'vl6180': 'Alcance corto (60cm). Muy alta precisión. Zona muerta: <10mm. Ideal para experimentos de mesa pequeños.',
+    'vl53l5x': 'Multizona (8x8). Permite medir múltiples objetos. Zona muerta: <20mm.'
+};
+
+function copyDataToClipboard() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const sensor = tabConf ? tabConf.sensor : null;
+    if (!sensor || !sensorData[sensor] || sensorData[sensor].length === 0) {
+        alert('No hay datos para copiar. Realiza una medición primero.');
+        return;
+    }
+    
+    const exportData = prepareExportData(sensor);
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(jsonStr).then(() => {
+            const btn = $('btn-copy-data');
+            const oldText = btn.textContent;
+            btn.innerHTML = '✅ ¡Copiado!';
+            setTimeout(() => btn.innerHTML = '📋 Copiar Datos', 2000);
+        }).catch(() => {
+            alert('Error al copiar. Usa el menú de Exportar.');
+        });
+    } else {
+        alert('Copia no soportada. Usa el menú de Exportar.');
+    }
+}
+
+function updateToFUI() {
+    const modelEl = $('tof_model');
+    if (!modelEl) return;
+    const model = modelEl.value;
+    const desc = $('tof_model_desc');
+    const rangeContainer = $('tof_range_container');
+    
+    if (desc) desc.textContent = TOF_INFO[model] || 'Modelo estándar I2C.';
+    if (rangeContainer) {
+        rangeContainer.style.display = (model === 'vl53l0x') ? 'block' : 'none';
+    }
+}
+
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
     // Sensor dropdown — use 'input' + track mousedown for reselection
@@ -1565,7 +1615,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Nav icon buttons — toggle behavior (click again = go back)
     if ($('btn-nav-config')) $('btn-nav-config').addEventListener('click', () => {
-        switchTab(currentTab === 'config' ? lastSensorTab : 'config');
+        const isConfig = currentTab === 'config';
+        switchTab(isConfig ? lastSensorTab : 'config');
+        if (!isConfig) setTimeout(updateToFUI, 50); // Garantizar UI actualizada al abrir
     });
     if ($('btn-nav-gpio')) $('btn-nav-gpio').addEventListener('click', () => {
         switchTab(currentTab === 'gpioview' ? lastSensorTab : 'gpioview');
@@ -1579,7 +1631,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Action buttons
     $('btn-record').addEventListener('click', toggleRecording);
-    $('btn-export').addEventListener('click', exportJSON);
+    $('btn-export').addEventListener('click', openExportModal); // Actualizado para usar el modal unificado
 
     // Python editor events
     if ($('example-select')) $('example-select').addEventListener('change', (e) => {
@@ -1606,8 +1658,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Config buttons
-    if ($('btn-save-tof')) $('btn-save-tof').addEventListener('click', saveTofConfig);
-    if ($('btn-save-rate')) $('btn-save-rate').addEventListener('click', saveSampleRate);
+    if ($('btn-save-config')) $('btn-save-config').addEventListener('click', saveAllConfig);
     if ($('usb-auto-log')) $('usb-auto-log').addEventListener('change', toggleUsbAutoLog);
     if ($('btn-usb-mount')) $('btn-usb-mount').addEventListener('click', () => {
         fetchConfig();

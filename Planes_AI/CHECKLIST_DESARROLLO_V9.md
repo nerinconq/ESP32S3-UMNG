@@ -8,12 +8,12 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 - [x] **Actualización del README.md** (Completado: v9.0, mDNS, USB Host, Protocolo LED)
 
 ## 🔬 2. Refinamiento de Sensores (Lógica de Medición)
-- [ ] **Filtrado de Rangos ToF (C++)**: 
-  - Implementar lógica para ignorar lecturas fuera de `distMin` y `distMax` en `readSensors()`.
+- [x] **Filtrado de Rangos ToF (C++)**: 
+  - Implementado (Filtro Anti-8190: Clipping al máximo real en caso de error).
 - [ ] **Optimización PSRAM**:
   - Convertir el buffer de `highSpeedBuffer` en un **Buffer Circular** funcional.
-- [ ] **Estabilidad del Gatillo**:
-  - Validar que el "Auto-Stop" por distancia no interfiera con experimentos de caída libre (ajuste de lógica de dirección).
+- [x] **Estabilidad del Gatillo**:
+  - Validar que el "Auto-Stop" por distancia no interfiera con experimentos de caída libre (Logrado: Parada inteligente 1cm antes de zona muerta).
 
 ## 💾 3. USB Host MSC (Estabilidad Híbrida)
 - [ ] **Prueba de Escritura Masiva**: Validar que archivos de >1MB se copien correctamente al pendrive sin errores de LittleFS.

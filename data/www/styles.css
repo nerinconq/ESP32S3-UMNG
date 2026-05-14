@@ -760,6 +760,67 @@ body {
     color: var(--text-muted);
 }
 
+/* ─── Config Panel Improvements ─── */
+.sensor-config-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1.2rem;
+    transition: all 0.3s ease;
+}
+.sensor-config-box:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+.sensor-config-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding-bottom: 0.6rem;
+}
+.sensor-config-header h3 {
+    font-size: 0.95rem;
+    color: var(--accent-cyan);
+    margin: 0;
+}
+.sensor-icon {
+    font-size: 1.1rem;
+}
+.config-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.full-width {
+    width: 100%;
+}
+.config-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin-bottom: 1rem;
+}
+
+/* ─── Layout Utility ─── */
+.config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .config-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
 /* ─── Sync Badge (H5) ─── */
 .sync-badge {
     font-size: 0.72rem;

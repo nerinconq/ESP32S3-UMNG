@@ -140,6 +140,8 @@ struct SystemState {
   float distMax = 2000.0;
   String tofRange = "short";    // Perfil VL53L0X: "short" o "long"
   
+  uint32_t samplesCount = 0;
+  bool bufferFull = false;
   unsigned long lastSampleTime = 0;
   unsigned long measurementStartTime = 0;
 } state;
@@ -149,6 +151,12 @@ void safeReboot() {
   Serial.println("[SYS] Preparando reinicio... Guardando buffers...");
   delay(1000); // 1 segundo de seguridad
   ESP.restart();
+}
+
+void resetBuffer() {
+  bufferIndex = 0;
+  state.samplesCount = 0;
+  state.bufferFull = false;
 }
 
 // Forward declarations
@@ -360,9 +368,14 @@ void readSensors() {
       }
     }
 
-    if (!timeout && dist > 0 && dist < 8000) {
-      state.prevDistance = state.lastDistance;
-      state.lastDistance = dist;
+    if (!timeout) {
+      // FILTRO ANTI-8190: Si el sensor pierde el objeto (>8000), ignorar la lectura.
+      // Conservamos el último valor válido para evitar saltos/escalones en la gráfica.
+      // La parada de seguridad en Auto usa el valor crudo (dist) más abajo.
+      if (dist < 8000) {
+        state.prevDistance = state.lastDistance;
+        state.lastDistance = dist;
+      }
 
       if (state.triggerEnabled && state.isWaitingForTrigger) {
         if (abs(state.lastDistance - state.initialDistance) >= state.triggerThreshold) {
@@ -373,38 +386,34 @@ void readSensors() {
           state.encMeasure.active = true;
           state.hxMeasure.active = true;
           setLED(CRGB::Blue);
-          bufferIndex = 0; // Reset buffer para nueva captura
+          resetBuffer();
           ws.textAll("{\"command\":\"TRIGGER_START\",\"t\":0}");
-          Serial.println("[AUTO] ¡Movimiento detectado! Iniciando registro automático.");
+          Serial.println("[AUTO] ¡Movimiento detectado!");
         }
       } 
       else if (state.measuring) {
-        float stopDist = state.distMax; // Por defecto detener en el máximo del sensor (ej. 2000mm)
-        if (state.triggerEnabled && state.tubeLength > 0) {
-          stopDist = state.tubeLength; // Si hay longitud de tubo configurada y toma auto, usarla
-        }
-        
+        float stopDist = (state.triggerEnabled && state.tubeLength > 0) ? state.tubeLength : state.distMax;
         bool shouldStop = false;
         
-        // 1. Si el movimiento inicia por debajo del límite, detener al cruzar el límite hacia arriba
-        if (state.initialDistance < stopDist) {
-            if (state.lastDistance >= stopDist) {
-                shouldStop = true;
-                Serial.printf("[AUTO] Límite superior alcanzado (%.1f >= %.1f). Deteniendo.\n", state.lastDistance, stopDist);
+        if (state.triggerEnabled) {
+            // Lógica de parada inteligente (Solo modo Automático)
+            // 1. Si el objeto se ALEJA: detener en el largo del tubo
+            if (state.initialDistance < stopDist) {
+                if (state.lastDistance >= stopDist) shouldStop = true;
+            } 
+            // 2. Si el objeto BAJA: detener 1cm antes de la zona muerta
+            else {
+                if (state.lastDistance <= (state.distMin - 10)) shouldStop = true;
             }
-        } 
-        // 2. Si el movimiento inicia por encima del límite (ej. caída libre hacia el sensor), detener en la zona muerta
-        else {
-            if (state.lastDistance <= state.distMin) {
+            
+            // 3. SEGURIDAD: Si el sensor manda error (perdió el objeto), detener toma
+            if (!shouldStop && dist >= 8000) {
                 shouldStop = true;
-                Serial.printf("[AUTO] Zona muerta alcanzada (%.1f <= %.1f). Deteniendo.\n", state.lastDistance, state.distMin);
+                Serial.println("[AUTO] Señal perdida o fuera de rango. Deteniendo.");
             }
-        }
-        
-        // 3. Condición de seguridad universal: si llega al máximo físico del sensor, detener
-        if (!shouldStop && state.lastDistance >= state.distMax) {
-            shouldStop = true;
-            Serial.printf("[AUTO] Límite máximo físico del sensor alcanzado (%.1f). Deteniendo.\n", state.lastDistance);
+
+            // 4. Límite físico
+            if (!shouldStop && state.lastDistance >= state.distMax) shouldStop = true;
         }
         
         if (shouldStop) {
@@ -415,7 +424,6 @@ void readSensors() {
           state.hxMeasure.active = false;
           setLED(CRGB(20, 20, 20));
           blinkLED(CRGB::Green, 3, 150);
-          setLED(CRGB(20, 20, 20));
           ws.textAll("{\"command\":\"TRIGGER_STOP\"}");
         }
       }
@@ -427,14 +435,26 @@ void readSensors() {
         state.lastVelocity = newVel;
       }
 
-      if (state.measuring && highSpeedBuffer && bufferIndex < MAX_SAMPLES) {
-        highSpeedBuffer[bufferIndex++] = {
+      if (state.measuring && highSpeedBuffer) {
+        highSpeedBuffer[bufferIndex] = {
           (uint32_t)(millis() - state.measurementStartTime),
           state.lastDistance,
           state.lastVelocity,
           state.lastWeight,
           state.lastAngleDeg
         };
+        
+        bufferIndex++;
+        if (bufferIndex >= MAX_SAMPLES) {
+            bufferIndex = 0;
+            state.bufferFull = true;
+        }
+        
+        if (!state.bufferFull) {
+            state.samplesCount = bufferIndex;
+        } else {
+            state.samplesCount = MAX_SAMPLES;
+        }
       }
     }
   }
@@ -515,6 +535,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     String msg = String((char*)data).substring(0, len);
     if (msg == "START") {
       state.measuring = true;
+      state.triggerEnabled = false;   // DESACTIVAR modo gatillo en manual
+      state.isWaitingForTrigger = false;
+      resetBuffer();
       state.measurementStartTime = millis();
       state.initialDistance = state.lastDistance;
       state.tofMeasure.active = true;
@@ -553,13 +576,14 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       preferences.begin("physys", false);
       preferences.putString("tof_range", state.tofRange);
       preferences.end();
-      Serial.printf("[CMD] Perfil de alcance ToF ajustado a: %s\n", state.tofRange.c_str());
+      Serial.printf("[CMD] Perfil ToF ajustado a: %s (Reiniciar para aplicar)\n", state.tofRange.c_str());
     }
-    else if (msg == "START_TOF") { state.initialDistance = state.lastDistance; state.tofMeasure.active = true; state.measuring = true; state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
+    else if (msg == "START_TOF") { state.initialDistance = state.lastDistance; state.tofMeasure.active = true; state.measuring = true; resetBuffer(); state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
     else if (msg == "STOP_TOF")  { state.tofMeasure.active = false; checkGlobalStop(); }
     else if (msg == "START_ENC") { 
       state.encMeasure.active = true; 
       state.measuring = true; 
+      resetBuffer();
       state.measurementStartTime = millis(); 
       state.cumulativeAngleDeg = 0; 
       state.lastRawAngle = -1;
@@ -568,7 +592,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       Serial.println("[CMD] Medición de Encoder iniciada (Ángulo a cero)");
     }
     else if (msg == "STOP_ENC")  { state.encMeasure.active = false; checkGlobalStop(); }
-    else if (msg == "START_HX")  { state.hxMeasure.active = true; state.measuring = true; state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
+    else if (msg == "START_HX")  { state.hxMeasure.active = true; state.measuring = true; resetBuffer(); state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
     else if (msg == "STOP_HX")   { state.hxMeasure.active = false; checkGlobalStop(); }
     else if (msg == "RESET_ENC") {
       state.cumulativeAngleDeg = 0;

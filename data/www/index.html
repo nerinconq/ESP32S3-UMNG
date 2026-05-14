@@ -23,7 +23,7 @@
             <div class="header-right">
                 <span id="battery-badge" class="battery-badge" title="Batería">🔋 --</span>
                 <button id="btn-record" class="btn-action btn-rec" onclick="toggleRecording()"><span class="dot"></span> Grabar</button>
-                <button id="btn-export" class="btn-action btn-gold" onclick="exportJSON()">📤 Exportar</button>
+                <button id="btn-export" class="btn-action btn-gold" onclick="openExportModal()">📤 Exportar a Pendrive</button>
             </div>
         </header>
 
@@ -70,10 +70,12 @@
                         <button id="btn-sensor-tare" class="btn-action btn-teal" onclick="tareSensor()">⚖️ Tara</button>
                         <button id="btn-sensor-invert" class="btn-action btn-gold" onclick="toggleInvertEncoder()" title="Invertir sentido de giro">🔄 Invertir</button>
                         <button id="btn-sensor-reset-enc" class="btn-action btn-warn" onclick="resetEncoder()" title="Poner a cero ángulo">0️⃣ Cero</button>
-                        <button id="btn-sensor-export" class="btn-action btn-teal" style="background-color: #10b981; color: white;" onclick="exportSensorCSV()">📥 Exportar CSV</button>
-                        <button id="btn-sensor-clear" class="btn-action btn-warn" onclick="clearSensorData()">🗑️ Limpiar</button>
-                        <button id="btn-esp-clear" class="btn-action btn-warn" onclick="clearESP32Data()" title="Borrar datos del ESP32">💾 Limpiar ESP</button>
-                        <div id="auto-capture-container" style="display:inline-flex; align-items:center; gap:6px; background: rgba(255,180,0,0.1); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,180,0,0.3);">
+                        
+                        <button id="btn-clear-browser" class="btn-action" style="background:rgba(255,255,255,0.05);color:var(--text-secondary);border:1px solid rgba(255,255,255,0.1)" onclick="clearLocalData()">🗑️ Limpiar Gráfica</button>
+                        <button id="btn-clear-esp" class="btn-action btn-warn" onclick="clearEspFiles()">📁🗑️ Borrar Archivos ESP</button>
+
+                        <!-- TOMA AUTOMÁTICA (Trigger) -->
+                        <div id="auto-capture-container" style="display:inline-flex; align-items:center; gap:6px; background: rgba(255,180,0,0.1); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,180,0,0.3); margin-left:10px;">
                             <input type="number" id="auto-stop-dist" class="select-premium" style="width:70px; font-size:12px; padding:4px 6px; border:1px solid #f0b429; text-align:center;" value="0" min="0" max="8000" placeholder="mm">
                             <span style="font-size:11px; color:#94a3b8;">mm</span>
                             <button id="btn-trigger" class="btn-action btn-gold" onclick="toggleTriggerMode()" title="Toma automática (0 = sin parada)">🎯 Toma Auto</button>
@@ -177,22 +179,32 @@
                 </div>
                 <div class="config-body">
                     <div class="config-grid">
-                        <div class="config-group">
-                            <h3>Sensor de Posición (ToF)</h3>
-                            <p class="config-desc">Modelo conectado al I2C #0 (GPIO 4/5).</p>
-                            <select id="tof_model" class="select-premium full-width">
+                        <!-- SECCIÓN 1: POSICIÓN (ToF) -->
+                        <div class="config-group sensor-config-box">
+                            <div class="sensor-config-header">
+                                <span class="sensor-icon">📏</span>
+                                <h3>Sensor de Posición (ToF)</h3>
+                            </div>
+                            <p class="config-desc" id="tof_model_desc">Modelo conectado al I2C #0 (GPIO 4/5).</p>
+                            
+                            <label class="config-label">Modelo de Sensor</label>
+                            <select id="tof_model" class="select-premium full-width" onchange="updateToFUI()">
                                 <option value="vl53l0x">VL53L0X (Básico — 2m)</option>
                                 <option value="vl53l1x">VL53L1X (Largo alcance — 4m)</option>
                                 <option value="vl53l1xv2">VL53L1X v2 (Largo alcance — 4m)</option>
                                 <option value="vl6180">VL6180X (Corto alcance — 60cm)</option>
                                 <option value="vl53l5x">VL53L5CX (Multizona — 8x8)</option>
                             </select>
-                            <h3 style="margin-top:15px">Perfil de Alcance (Solo VL53L0X)</h3>
-                            <select id="tof_range" class="select-premium full-width">
-                                <option value="short" selected>Corto Alcance (Default ~1.2m)</option>
-                                <option value="long">Largo Alcance (Avanzado ~2.0m)</option>
-                            </select>
-                            <h3 style="margin-top:15px">Frecuencia de Muestreo</h3>
+
+                            <div id="tof_range_container" style="margin-top:15px; display:none;">
+                                <label class="config-label">Perfil de Alcance</label>
+                                <select id="tof_range" class="select-premium full-width">
+                                    <option value="short" selected>Corto Alcance (Default ~1.2m)</option>
+                                    <option value="long">Largo Alcance (Avanzado ~2.0m)</option>
+                                </select>
+                            </div>
+
+                            <label class="config-label" style="margin-top:15px">Frecuencia de Muestreo</label>
                             <select id="sample_rate" class="select-premium full-width">
                                 <option value="10" selected>100 Hz (10 ms) — RECOMENDADO</option>
                                 <option value="20">50 Hz (20 ms)</option>
@@ -201,29 +213,48 @@
                                 <option value="5">200 Hz (5 ms)</option>
                                 <option value="2">500 Hz (2 ms) — Máximo</option>
                             </select>
-                            <h3 style="margin-top:15px">Montaje Mecánico</h3>
+
+                            <label class="config-label" style="margin-top:15px">Montaje Mecánico</label>
                             <p class="config-desc">Largo del tubo (mm) para parada automática.</p>
                             <input type="number" id="tube_length" class="select-premium full-width" style="border:1px solid #334155" value="500" placeholder="Ej: 500 mm">
-                            <button id="btn-save-config" class="btn-action btn-rec" style="width:100%;margin-top:15px" onclick="saveAllConfig()">💾 Guardar Configuración</button>
                         </div>
+
                         <div class="config-group">
-                            <h3>Encoder Rotacional (AS5600)</h3>
-                            <div class="checkbox-row">
-                                <label class="switch"><input type="checkbox" id="invert-encoder-check" onchange="toggleInvertEncoder()"><span class="slider round"></span></label>
-                                <span>Invertir sentido de giro</span>
+                            <!-- SECCIÓN 2: ENCODER -->
+                            <div class="sensor-config-box">
+                                <div class="sensor-config-header">
+                                    <span class="sensor-icon">🔄</span>
+                                    <h3>Encoder Rotacional (AS5600)</h3>
+                                </div>
+                                <p class="config-desc">Sensor magnético de alta resolución (12-bit).</p>
+                                <div class="checkbox-row">
+                                    <label class="switch"><input type="checkbox" id="invert-encoder-check" onchange="toggleInvertEncoder()"><span class="slider round"></span></label>
+                                    <span>Invertir sentido de giro</span>
+                                </div>
+                                <button class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
                             </div>
-                            <button class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
-                            <h3 style="margin-top:20px">Celda de Carga (HX711)</h3>
-                            <div class="checkbox-row">
-                                <label class="switch"><input type="checkbox" id="config-hx-filter-check" onchange="toggleHxFilter()"><span class="slider round"></span></label>
-                                <span>Filtro Digital</span>
+
+                            <!-- SECCIÓN 3: FUERZA -->
+                            <div class="sensor-config-box" style="margin-top:20px">
+                                <div class="sensor-config-header">
+                                    <span class="sensor-icon">⚖️</span>
+                                    <h3>Celda de Carga (HX711)</h3>
+                                </div>
+                                <p class="config-desc">Amplificador para medición de masa y peso.</p>
+                                <div class="checkbox-row">
+                                    <label class="switch"><input type="checkbox" id="config-hx-filter-check" onchange="toggleHxFilter()"><span class="slider round"></span></label>
+                                    <span>Filtro Digital</span>
+                                </div>
+                                <div class="checkbox-row" style="margin-top:8px">
+                                    <label class="switch"><input type="checkbox" id="config-hx-stability-check" onchange="toggleHxStability()"><span class="slider round"></span></label>
+                                    <span>Estabilidad Alta (16-bit)</span>
+                                </div>
+                                <button class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
                             </div>
-                            <div class="checkbox-row" style="margin-top:8px">
-                                <label class="switch"><input type="checkbox" id="config-hx-stability-check" onchange="toggleHxStability()"><span class="slider round"></span></label>
-                                <span>Estabilidad Alta (16-bit)</span>
-                            </div>
-                            <button class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
+
+                            <!-- ACCIONES DE SISTEMA -->
                             <div style="margin-top:25px;padding-top:15px;border-top:1px solid rgba(255,255,255,0.1)">
+                                <button id="btn-save-config" class="btn-action btn-rec" style="width:100%; margin-bottom: 10px;" onclick="saveAllConfig()">💾 Guardar Configuración</button>
                                 <button id="btn-reboot" class="btn-action btn-warn" style="width:100%" onclick="rebootESP()">🔄 Reiniciar ESP32</button>
                             </div>
                         </div>
