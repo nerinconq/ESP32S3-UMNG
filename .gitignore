@@ -19,3 +19,20 @@ desktop.ini
 .gemini/
 .agents/
 .mcp/
+
+# Physys Lab Specific
+graphify-out/
+produccion/
+*.json
+!data/www/manifest.json
+!data/www/config.json
+!firebase.json
+!firestore.indexes.json
+
+# Test Data and Logs
+*.log
+pio_error.txt
+pio_upload_error.txt
+upload.log
+uploadfs.log
+Informe_Fisica_UMNG_2.json
