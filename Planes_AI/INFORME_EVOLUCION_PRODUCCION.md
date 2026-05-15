@@ -45,6 +45,27 @@ La carpeta `produccion/` ha sido sincronizada con el estado actual del desarroll
 
 ---
 
+## 🔄 Actualización: v9.1 — Filtro Anti-8190
+
+**Fecha:** 2026-05-14 07:05 COT
+**Commit:** `93d3407`
+
+### Cambio aplicado
+- **`src/main.cpp`**: Corrección del filtro de lecturas erróneas del sensor ToF. Cuando el sensor devuelve >8000 (señal perdida), ahora se **ignora la lectura** y se conserva el último valor válido, en lugar de forzar un salto a `distMax` que generaba escalones en la gráfica.
+- **Modo Auto**: Parada de seguridad intacta (verifica valor crudo `dist >= 8000`).
+- **Modo Manual**: Sin afectación (aislado por `triggerEnabled = false`).
+
+### Archivos sincronizados a `produccion/`
+
+| Archivo | Estado |
+| :--- | :--- |
+| `src/main.cpp` | ✅ Actualizado (filtro anti-8190) |
+| `data/www/app.js` | ✅ Actualizado |
+| `data/www/index.html` | ✅ Actualizado |
+| `data/www/styles.css` | ✅ Actualizado |
+
+---
+
 > [!TIP]
 > **Respaldo Seguro:** La carpeta `produccion/` ahora sirve como un snapshot perfecto para despliegues en campo. Se recomienda no modificarla hasta el próximo hito validado.
 

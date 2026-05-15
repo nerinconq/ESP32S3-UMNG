@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Propuesta: Integración Physys Lab → Desmos</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --card: #1e293b;
+    --border: rgba(255,255,255,0.08);
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --teal: #14b8a6;
+    --blue: #3b82f6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #042f2e 100%);
+    padding: 60px 24px 40px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 50%, rgba(99,102,241,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 80%, rgba(20,184,166,0.06) 0%, transparent 50%);
+    animation: pulse 8s ease-in-out infinite alternate;
+  }
+  @keyframes pulse {
+    from { opacity: 0.5; transform: scale(1); }
+    to   { opacity: 1;   transform: scale(1.05); }
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a5b4fc, #14b8a6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .header .subtitle {
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 300;
+    position: relative;
+  }
+  .header .badge {
+    display: inline-block;
+    background: rgba(99,102,241,0.2);
+    color: #a5b4fc;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 16px;
+    position: relative;
+    border: 1px solid rgba(99,102,241,0.3);
+  }
+
+  /* Container */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 20px;
+  }
+
+  /* Problem Section */
+  .problem-section {
+    background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(239,68,68,0.02));
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 40px;
+  }
+  .problem-section h2 {
+    color: #fca5a5;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .problem-section p {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .problem-section .code-block {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    color: #fbbf24;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+  .flow-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    text-align: center;
+    min-width: 100px;
+  }
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 1.2rem;
+    font-weight: bold;
+  }
+  .flow-step.current { border-color: var(--red); color: #fca5a5; }
+  .flow-step.target  { border-color: var(--green); color: #6ee7b7; }
+
+  /* Section titles */
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+
+  /* Solution Cards */
+  .solutions-grid {
+    display: grid;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+  .solution-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .solution-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+  .solution-card.recommended {
+    border-color: rgba(16,185,129,0.4);
+    background: linear-gradient(135deg, var(--card), rgba(16,185,129,0.05));
+  }
+  .solution-card.recommended::after {
+    content: '⭐ RECOMENDADA';
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(16,185,129,0.2);
+    color: #6ee7b7;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border: 1px solid rgba(16,185,129,0.3);
+  }
+  .solution-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .solution-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .solution-icon.a { background: rgba(20,184,166,0.15); }
+  .solution-icon.b { background: rgba(99,102,241,0.15); }
+  .solution-icon.c { background: rgba(245,158,11,0.15); }
+  .solution-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .solution-tag {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .solution-desc {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-bottom: 18px;
+    line-height: 1.7;
+  }
+
+  /* Metrics */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .metric {
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+  .metric-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .metric-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  .metric-value.easy   { color: #6ee7b7; }
+  .metric-value.medium { color: #fbbf24; }
+  .metric-value.hard   { color: #fca5a5; }
+
+  /* Pros/Cons */
+  .pros-cons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .pros, .cons {
+    font-size: 0.8rem;
+    line-height: 1.8;
+  }
+  .pros li::marker { content: '✅ '; }
+  .cons li::marker { content: '⚠️ '; }
+  .pros li, .cons li { padding-left: 4px; }
+  ul { list-style-position: outside; padding-left: 20px; }
+  .pros { color: #86efac; }
+  .cons { color: #fde68a; }
+
+  /* Code Example */
+  .code-example {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-top: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    color: #e2e8f0;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+  }
+  .code-example .comment { color: #64748b; }
+  .code-example .keyword { color: #c084fc; }
+  .code-example .string  { color: #6ee7b7; }
+  .code-example .fn      { color: #93c5fd; }
+
+  /* Recommendation */
+  .recommendation {
+    background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(99,102,241,0.05));
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 16px;
+    padding: 28px;
+    margin-top: 40px;
+  }
+  .recommendation h2 {
+    color: #6ee7b7;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+  }
+  .recommendation p {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .phase-list {
+    margin-top: 16px;
+  }
+  .phase-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .phase-item:last-child { border-bottom: none; }
+  .phase-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .phase-text { font-size: 0.88rem; }
+  .phase-text strong { color: var(--text); }
+  .phase-text span { color: var(--muted); }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  /* Desmos Preview */
+  .desmos-preview {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 16px;
+    color: #1a1a1a;
+    font-size: 0.82rem;
+  }
+  .desmos-preview table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .desmos-preview th {
+    background: #f0f0f0;
+    padding: 8px 12px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #2d70b3;
+    border-bottom: 2px solid #2d70b3;
+  }
+  .desmos-preview td {
+    padding: 6px 12px;
+    text-align: center;
+    border-bottom: 1px solid #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+  }
+  .desmos-label {
+    font-size: 0.7rem;
+    color: #888;
+    text-align: center;
+    margin-top: 6px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>📊 Physys Lab → Desmos</h1>
+  <p class="subtitle">Propuesta de Integración para Exportación de Datos Experimentales</p>
+  <span class="badge">UMNG — Physys Lab v9.1 — Mayo 2026</span>
+</div>
+
+<div class="container">
+
+  <!-- Problem Statement -->
+  <div class="problem-section">
+    <h2>🔴 Problema Actual</h2>
+    <p>Los datos copiados al portapapeles desde Physys Lab están en formato <strong>JSON</strong>, pero Desmos Graphing Calculator necesita datos en formato <strong>TSV (Tab-Separated Values)</strong> para crear tablas automáticamente al pegar.</p>
+    
+    <div class="flow">
+      <div class="flow-step current">📋 Copiar Datos<br><small>JSON</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">📱 Portapapeles</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step current">📉 Desmos<br><small>❌ No reconoce</small></div>
+    </div>
+
+    <p class="code-label">Lo que se copia actualmente:</p>
+    <div class="code-block">{ "sensor": "ToF", "data": [{"t":0,"d":150.3}, {"t":10,"d":148.7}, ...] }</div>
+    
+    <p class="code-label" style="margin-top:14px">Lo que Desmos necesita (TSV):</p>
+    <div class="code-block" style="color:#6ee7b7">t(ms)	distancia(mm)
+0	150.3
+10	148.7
+20	145.2
+30	139.8</div>
+  </div>
+
+  <!-- Solutions -->
+  <h2 class="section-title">💡 Soluciones Propuestas</h2>
+
+  <div class="solutions-grid">
+
+    <!-- Solution A -->
+    <div class="solution-card recommended">
+      <div class="solution-header">
+        <div class="solution-icon a">📋</div>
+        <div>
+          <div class="solution-name">A: Botón "Copiar para Desmos"</div>
+          <div class="solution-tag">Modificación mínima en app.js</div>
+        </div>
+      </div>
+      <p class="solution-desc">
+        Agregar un botón dedicado en el modal de exportación que copie los datos al portapapeles en formato <strong>TSV (Tab-Separated)</strong>. Al pegar en una línea vacía de Desmos, se genera automáticamente una tabla con las columnas correctas.
+      </p>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Dificultad</div>
+          <div class="metric-value easy">Baja</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Tiempo Est.</div>
+          <div class="metric-value easy">15 min</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Impacto</div>
+          <div class="metric-value easy">Alto</div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <ul class="pros">
+          <li>Funciona en celular y PC</li>
+          <li>Sin dependencias externas</li>
+          <li>Compatible con Excel y Sheets</li>
+          <li>Límite Desmos: 1000 filas</li>
+        </ul>
+        <ul class="cons">
+          <li>El usuario debe abrir Desmos manualmente</li>
+          <li>Requiere pegar en línea vacía</li>
+        </ul>
+      </div>
+
+      <p class="code-label" style="margin-top:18px">Vista previa del resultado en Desmos:</p>
+      <div class="desmos-preview">
+        <table>
+          <thead><tr><th>x₁ (ms)</th><th>y₁ (mm)</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>150.3</td></tr>
+            <tr><td>10</td><td>148.7</td></tr>
+            <tr><td>20</td><td>145.2</td></tr>
+            <tr><td>30</td><td>139.8</td></tr>
+            <tr><td>40</td><td>132.1</td></tr>
+          </tbody>
+        </table>
+        <p class="desmos-label">↑ Tabla autogenerada al pegar datos TSV en Desmos</p>
+      </div>
+    </div>
+
+    <!-- Solution B -->
+    <div class="solution-card">
+      <div class="solution-header">
+        <div class="solution-icon b">🔗</div>
+        <div>
+          <div class="solution-name">B: Enlace Directo a Desmos</div>
+          <div class="solution-tag">Desmos API — Estado calculadora como URL</div>
+        </div>
+      </div>
+      <p class="solution-desc">
+        Generar un enlace que abra Desmos en una nueva pestaña con los datos ya cargados como tabla. Utiliza la API de Desmos para construir un <strong>estado de calculadora</strong> serializado en la URL, incluyendo las columnas de tiempo y medición.
+      </p>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Dificultad</div>
+          <div class="metric-value medium">Media</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Tiempo Est.</div>
+          <div class="metric-value medium">2-3 hrs</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Impacto</div>
+          <div class="metric-value easy">Muy Alto</div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <ul class="pros">
+          <li>Un clic: datos en Desmos</li>
+          <li>No requiere pegar nada</li>
+          <li>Se puede compartir el link</li>
+        </ul>
+        <ul class="cons">
+          <li>Requiere internet activo</li>
+          <li>Límite de URL (~8KB datos)</li>
+          <li>API key de Desmos necesaria</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Solution C -->
+    <div class="solution-card">
+      <div class="solution-header">
+        <div class="solution-icon c">📈</div>
+        <div>
+          <div class="solution-name">C: Desmos Embebido en Physys Lab</div>
+          <div class="solution-tag">Iframe + Desmos JS API</div>
+        </div>
+      </div>
+      <p class="solution-desc">
+        Integrar un calculador Desmos directamente dentro de la interfaz web de Physys Lab como una pestaña o vista adicional. Los datos del sensor se inyectan automáticamente a la gráfica Desmos usando <code>calculator.setExpression()</code> sin que el usuario tenga que copiar nada.
+      </p>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Dificultad</div>
+          <div class="metric-value hard">Alta</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Tiempo Est.</div>
+          <div class="metric-value hard">5-8 hrs</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Impacto</div>
+          <div class="metric-value easy">Premium</div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <ul class="pros">
+          <li>Experiencia completamente integrada</li>
+          <li>Gráfica en tiempo real posible</li>
+          <li>Cero pasos para el usuario</li>
+        </ul>
+        <ul class="cons">
+          <li>Requiere WiFi con internet</li>
+          <li>Aumenta peso de la UI (JS externo)</li>
+          <li>API key + términos de uso Desmos</li>
+          <li>Conflicto con modo AP sin internet</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recommendation -->
+  <div class="recommendation">
+    <h2>🎯 Recomendación: Implementación Progresiva</h2>
+    <p>Empezar con la Solución A que es inmediata y resuelve el 90% del problema. Luego, en una fase posterior, agregar la B como mejora premium.</p>
+    
+    <div class="phase-list">
+      <div class="phase-item">
+        <div class="phase-number">1</div>
+        <div class="phase-text">
+          <strong>Fase Inmediata — Botón "Copiar para Desmos" (TSV)</strong><br>
+          <span>Agregar botón en el modal de exportación que formatea los datos como columnas separadas por tabulación. Funciona offline, en celular y PC. Compatible con Desmos, Excel, Google Sheets y cualquier app que acepte tablas.</span>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-number">2</div>
+        <div class="phase-text">
+          <strong>Fase Futura — Enlace Directo a Desmos (API)</strong><br>
+          <span>Cuando haya conectividad a internet disponible, generar un botón "Abrir en Desmos" que lance la calculadora con los datos precargados. Requiere investigar la API de Desmos para estados serializados.</span>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-number">3</div>
+        <div class="phase-text">
+          <strong>Descartada — Embebido en PWA</strong><br>
+          <span>Descartada porque Physys Lab opera mayormente en modo AP (sin internet). El iframe de Desmos requiere conexión externa, lo cual contradice la arquitectura offline-first del instrumento.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    Physys Lab — Universidad Militar Nueva Granada (UMNG)<br>
+    Investigador: Nelson Rincón · Asistente AI: Antigravity<br>
+    Propuesta generada el 14 de mayo de 2026
+  </div>
+
+</div>
+</body>
+</html>

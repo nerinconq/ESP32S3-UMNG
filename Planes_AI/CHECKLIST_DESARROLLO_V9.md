@@ -9,11 +9,11 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 
 ## 🔬 2. Refinamiento de Sensores (Lógica de Medición)
 - [x] **Filtrado de Rangos ToF (C++)**: 
-  - Implementado (Filtro Anti-8190: Clipping al máximo real en caso de error).
+  - Implementado (Filtro Anti-8190: ignora lecturas >8000 y conserva último valor válido. Commit `93d3407`).
 - [ ] **Optimización PSRAM**:
   - Convertir el buffer de `highSpeedBuffer` en un **Buffer Circular** funcional.
 - [x] **Estabilidad del Gatillo**:
-  - Validar que el "Auto-Stop" por distancia no interfiera con experimentos de caída libre (Logrado: Parada inteligente 1cm antes de zona muerta).
+  - Código implementado: parada 10mm antes de zona muerta (bajada) y en largo del tubo (subida). ⚠️ Pendiente validación en campo.
 
 ## 💾 3. USB Host MSC (Estabilidad Híbrida)
 - [ ] **Prueba de Escritura Masiva**: Validar que archivos de >1MB se copien correctamente al pendrive sin errores de LittleFS.
@@ -26,6 +26,11 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 ## ☁️ 5. Cloud & Persistence (H5)
 - [ ] **Sincronización Firebase**: Implementar el botón de "Subida a la Nube" para experimentos guardados en IndexedDB.
 - [ ] **Validación Offline**: Verificar que el sistema funcione 100% sin internet antes de intentar sincronizar.
+
+## 📊 6. Exportación y Compatibilidad con Desmos
+- [ ] **Botón "Copiar para Desmos" (TSV)**: Agregar al modal de exportación un botón que copie datos como columnas separadas por tabulación, compatible con Desmos, Excel y Google Sheets.
+- [ ] **Enlace Directo a Desmos (API)**: Generar un botón "Abrir en Desmos" que lance la calculadora con datos precargados (requiere internet).
+- Propuesta visual detallada: `Planes_AI/PROPUESTA_INTEGRACION_DESMOS.html`
 
 ---
 
