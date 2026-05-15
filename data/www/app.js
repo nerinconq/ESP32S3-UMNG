@@ -886,6 +886,82 @@ function showExportModal(contentStr, filename) {
         }
     };
 
+    // ─── Separador Desmos ───
+    const desmosSep = document.createElement('div');
+    desmosSep.style.cssText = 'text-align:center;color:#64748b;font-size:11px;margin:14px 0 8px;border-top:1px solid #334155;padding-top:10px;letter-spacing:0.5px;text-transform:uppercase';
+    desmosSep.textContent = '📊 Desmos & Hojas de Cálculo';
+
+    // ─── Botón A: Copiar para Desmos (TSV) ───
+    const btnDesmosTSV = document.createElement('button');
+    btnDesmosTSV.innerHTML = '<span>📊</span> Copiar para Desmos (TSV)';
+    btnDesmosTSV.className = 'btn-action';
+    btnDesmosTSV.style.cssText = 'width:100%;margin-bottom:12px;padding:14px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px';
+    btnDesmosTSV.onclick = () => {
+        const tabConf = TAB_CONFIG[currentTab];
+        const sensor = tabConf ? tabConf.sensor : null;
+        const data = sensor ? sensorData[sensor] : null;
+        if (!data || data.length === 0) { alert('No hay datos para copiar.'); return; }
+        const vars = tabConf.variables;
+        const tsvHeader = 't(' + timeUnitLabel() + ')\t' + vars.map(v => v.label).join('\t');
+        const tsvRows = data.slice(0, 1000).map(d => {
+            let cols = [convertTime(d.t).toFixed(3)];
+            vars.forEach(v => cols.push((d[v.key] !== undefined ? d[v.key] : 0).toFixed(4)));
+            return cols.join('\t');
+        }).join('\n');
+        const tsv = tsvHeader + '\n' + tsvRows;
+        const doCopy = (text) => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            return Promise.resolve();
+        };
+        doCopy(tsv).then(() => {
+            const truncMsg = data.length > 1000 ? ' (1000/' + data.length + ' filas)' : '';
+            btnDesmosTSV.innerHTML = '✅ ¡TSV Copiado!' + truncMsg;
+            setTimeout(() => btnDesmosTSV.innerHTML = '<span>📊</span> Copiar para Desmos (TSV)', 3000);
+        }).catch(() => alert('Error al copiar. Intenta desde el textarea.'));
+    };
+
+    // ─── Botón B: Abrir en Desmos ───
+    const btnOpenDesmos = document.createElement('button');
+    btnOpenDesmos.innerHTML = '<span>🔗</span> Abrir en Desmos';
+    btnOpenDesmos.className = 'btn-action';
+    btnOpenDesmos.style.cssText = 'width:100%;margin-bottom:12px;padding:14px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px';
+    btnOpenDesmos.onclick = () => {
+        const tabConf = TAB_CONFIG[currentTab];
+        const sensor = tabConf ? tabConf.sensor : null;
+        const data = sensor ? sensorData[sensor] : null;
+        if (!data || data.length === 0) { alert('No hay datos para enviar a Desmos.'); return; }
+        const vars = tabConf.variables;
+        const tsvHeader = 't(' + timeUnitLabel() + ')\t' + vars.map(v => v.label).join('\t');
+        const tsvRows = data.slice(0, 1000).map(d => {
+            let cols = [convertTime(d.t).toFixed(3)];
+            vars.forEach(v => cols.push((d[v.key] !== undefined ? d[v.key] : 0).toFixed(4)));
+            return cols.join('\t');
+        }).join('\n');
+        const tsv = tsvHeader + '\n' + tsvRows;
+        const doCopy = (text) => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            return Promise.resolve();
+        };
+        doCopy(tsv).then(() => {
+            window.open('https://www.desmos.com/calculator', '_blank');
+            btnOpenDesmos.innerHTML = '✅ Desmos abierto — Pega (Ctrl+V) en línea vacía';
+            setTimeout(() => btnOpenDesmos.innerHTML = '<span>🔗</span> Abrir en Desmos', 4000);
+        }).catch(() => {
+            window.open('https://www.desmos.com/calculator', '_blank');
+            alert('Copia los datos del textarea y pégalos en Desmos.');
+        });
+    };
+
     const btnCerrar = document.createElement('button');
     btnCerrar.textContent = 'Cerrar';
     btnCerrar.className = 'btn-action btn-warn';
@@ -901,6 +977,9 @@ function showExportModal(contentStr, filename) {
     modal.appendChild(area);
     modal.appendChild(btnCopiar);
     modal.appendChild(btnDescargar);
+    modal.appendChild(desmosSep);
+    modal.appendChild(btnDesmosTSV);
+    modal.appendChild(btnOpenDesmos);
     modal.appendChild(btnCerrar);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
