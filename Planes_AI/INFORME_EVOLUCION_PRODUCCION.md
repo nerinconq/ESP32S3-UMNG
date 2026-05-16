@@ -66,6 +66,29 @@ La carpeta `produccion/` ha sido sincronizada con el estado actual del desarroll
 
 ---
 
+## 🔄 Actualización: v9.2 — Integración Desmos Offline y Estabilidad de Sensores
+
+**Fecha:** 2026-05-15 21:25 COT (Aprox.)
+**Commits:** `88d4665`, `52cec5c`
+
+### Avances Obtenidos
+1. **Bypass de Portal Cautivo en Android**:
+   - Android bloquea silenciosamente las descargas generadas localmente (`blob:` URLs) cuando está conectado a una red WiFi sin salida a internet (como la del ESP32).
+   - **Solución implementada**: Se migró la descarga a un flujo de servidor HTTP real. La App (`app.js`) genera los datos y hace un `POST` al nuevo endpoint `/api/temp-export` en el ESP32 (guardando temporalmente en RAM). Luego, se fuerza al navegador a hacer un `GET` a esa misma ruta. El ESP32 responde con la cabecera `Content-Disposition: attachment`, engañando al administrador de descargas de Android para guardar correctamente los archivos `.desmos` y `.csv` en la carpeta física de *Descargas* del celular.
+   - Se confirmó que los datos llegan íntegros y son visibles en Google Sheets.
+
+2. **Estabilización de Hardware y Memoria (PSRAM)**:
+   - Se identificó y resolvió una falla masiva en los sensores (lecturas en 0 mm y pérdida de I2C) originada por un cambio experimental previo en la inicialización de la PSRAM.
+   - **Solución implementada**: Se revirtió la configuración del `platformio.ini` de memoria `qio_opi` nuevamente al estado base `qio_qspi` (commit `52cec5c`). Esto restauró instantáneamente la capacidad del ESP32 de asignar búferes y recolectar telemetría sin interrupciones.
+
+### Estado frente a `produccion/`
+*(Pendiente de despliegue a producción una vez finalizadas las pruebas de campo y experimentos de Desmos).*
+- `src/main.cpp` (Modificado en desarrollo)
+- `data/www/app.js` (Modificado en desarrollo)
+- `platformio.ini` (Estabilizado en desarrollo)
+
+---
+
 > [!TIP]
 > **Respaldo Seguro:** La carpeta `produccion/` ahora sirve como un snapshot perfecto para despliegues en campo. Se recomienda no modificarla hasta el próximo hito validado.
 
