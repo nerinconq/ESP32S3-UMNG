@@ -77,7 +77,11 @@ La carpeta `produccion/` ha sido sincronizada con el estado actual del desarroll
    - **Solución implementada**: Se migró la descarga a un flujo de servidor HTTP real. La App (`app.js`) genera los datos y hace un `POST` al nuevo endpoint `/api/temp-export` en el ESP32 (guardando temporalmente en RAM). Luego, se fuerza al navegador a hacer un `GET` a esa misma ruta. El ESP32 responde con la cabecera `Content-Disposition: attachment`, engañando al administrador de descargas de Android para guardar correctamente los archivos `.desmos` y `.csv` en la carpeta física de *Descargas* del celular.
    - Se confirmó que los datos llegan íntegros y son visibles en Google Sheets.
 
-2. **Estabilización de Hardware y Memoria (PSRAM)**:
+2. **Visor Desmos HTML (Experiencia Móvil Nativa)**:
+   - Dado que la App móvil de Desmos no asocia la extensión `.desmos` a nivel de SO (Android), se creó una solución híbrida brillante: Se añadió un tercer botón que descarga un archivo `.html` independiente.
+   - Al tocar el archivo, el navegador móvil se abre, importa la API oficial de Desmos e inyecta toda la telemetría recolectada en un entorno visual interactivo offline/online. ¡Un hack brutal!
+
+3. **Estabilización de Hardware y Memoria (PSRAM)**:
    - Se identificó y resolvió una falla masiva en los sensores (lecturas en 0 mm y pérdida de I2C) originada por un cambio experimental previo en la inicialización de la PSRAM.
    - **Solución implementada**: Se revirtió la configuración del `platformio.ini` de memoria `qio_opi` nuevamente al estado base `qio_qspi` (commit `52cec5c`). Esto restauró instantáneamente la capacidad del ESP32 de asignar búferes y recolectar telemetría sin interrupciones.
 

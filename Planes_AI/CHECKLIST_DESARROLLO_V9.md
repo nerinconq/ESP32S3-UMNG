@@ -35,6 +35,8 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
   - Se implementó ruta `POST /api/temp-export` en ESP32 para alojar datos en RAM temporalmente y servirlos forzando descarga nativa HTTP (`Content-Disposition`).
 - [x] **Formatos Oficiales de Exportación**:
   - Soporte de `.desmos` (JSON validado para abrir en PC/App) y `.csv` compatible con Excel y Sheets.
+- [x] **Visor HTML Interactivo (App Móvil Offline/Online)**:
+  - Se generó un empaquetado `.html` que inyecta la API de Desmos directamente con los datos de telemetría precargados. Permite abrir y visualizar gráficas de alta calidad en el navegador móvil sin necesidad de instalar la App de Desmos nativa.
 - Propuesta visual detallada: `Planes_AI/PROPUESTA_INTEGRACION_DESMOS.html`
 
 ---

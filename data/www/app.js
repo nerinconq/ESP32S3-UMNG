@@ -1500,6 +1500,34 @@ function openExportModal() {
             });
         }
 
+        // ── Helper: generar Visor HTML de Desmos ──
+        function buildDesmosHTML() {
+            const stateJson = buildDesmosFile();
+            return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor Desmos - Physys Lab</title>
+<script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
+<style>body,html{margin:0;padding:0;height:100%;overflow:hidden;}</style>
+</head>
+<body>
+<div id="calculator" style="width:100vw;height:100vh;"></div>
+<script>
+var elt = document.getElementById('calculator');
+var calc = Desmos.GraphingCalculator(elt, {
+    keypad: true,
+    expressions: true,
+    settingsMenu: true,
+    zoomButtons: true
+});
+calc.setState(${stateJson});
+</script>
+</body>
+</html>`;
+        }
+
         // ── Helper: mostrar feedback ──
         function showDesmosMsg(html, color) {
             modal.querySelectorAll('.desmos-msg').forEach(el => el.remove());
@@ -1550,6 +1578,26 @@ function openExportModal() {
                 })
                 .catch(() => {
                     showDesmosMsg('❌ Error al preparar CSV. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ BOTÓN 3: Descargar Visor Desmos (HTML) ━━━
+        mkBtn('📱 Descargar Visor Interactivo (HTML)', 'linear-gradient(135deg,#8b5cf6,#7c3aed)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const fname = 'physys_' + sn + '_visor.html';
+            showDesmosMsg('⏳ Preparando Visor HTML...', '#94a3b8');
+            serverDownload(buildDesmosHTML(), fname, 'text/html')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>Visor HTML descargado</b><br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Toca el archivo <b>' + fname + '</b> descargado para abrir tu gráfica interactiva en el navegador.</small>',
+                        '#c4b5fd'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar Visor. Reintenta.', '#ef4444');
                 });
         });
 
