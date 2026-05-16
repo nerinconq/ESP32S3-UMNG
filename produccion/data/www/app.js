@@ -1,0 +1,1789 @@
+/* ═══════════════════════════════════════════════════════
+   Physys Lab v9.0 — App Controller
+   WebSocket Streaming + Canvas Chart + Sensor Dropdown
+   Per-sensor controls + Time unit selector + Export modal
+   ═══════════════════════════════════════════════════════ */
+
+// ─── Tab Definitions ───
+const TAB_CONFIG = {
+    movimiento: {
+        title: 'Cinemática Lineal',
+        sensor: 'TOF',
+        variables: [
+            { key: 'dist', label: 'Posición', unit: 'mm', color: '#00d4ff' },
+            { key: 'vel', label: 'Rapidez', unit: 'm/s', color: '#14f0c5' },
+            { key: 'acc', label: 'Aceleración', unit: 'm/s²', color: '#a78bfa' }
+        ],
+        subMetrics: [
+            { key: 'vel', label: 'Rapidez', unit: 'm/s' },
+            { key: 'acc', label: 'Aceleración', unit: 'm/s²' }
+        ]
+    },
+    rotacion: {
+        title: 'Cinemática Angular',
+        sensor: 'ENC',
+        variables: [
+            { key: 'angleDeg', label: 'Ángulo (°)', unit: '°', color: '#00d4ff' },
+            { key: 'angleRad', label: 'Ángulo (rad)', unit: 'rad', color: '#00d4ff' },
+            { key: 'angVel', label: 'Vel. Angular', unit: 'rad/s', color: '#14f0c5' },
+            { key: 'angAcc', label: 'Acel. Angular', unit: 'rad/s²', color: '#a78bfa' }
+        ],
+        subMetrics: [
+            { key: 'angVel', label: 'Vel. Angular', unit: 'rad/s' },
+            { key: 'angAcc', label: 'Acel. Angular', unit: 'rad/s²' }
+        ]
+    },
+    fuerza: {
+        title: 'Dinámica',
+        sensor: 'HX',
+        variables: [
+            { key: 'weight', label: 'Masa (g)', unit: 'g', color: '#f0b429' },
+            { key: 'mass', label: 'Masa (kg)', unit: 'kg', color: '#f0b429' },
+            { key: 'weightN', label: 'Peso Vertical', unit: 'N', color: '#ff4d6a' }
+        ],
+        subMetrics: [
+            { key: 'mass', label: 'Masa', unit: 'kg' },
+            { key: 'weightN', label: 'Peso (N)', unit: 'N' }
+        ]
+    }
+};
+
+// ─── Per-sensor recording state ───
+const sensorRecording = { TOF: false, ENC: false, HX: false };
+const sensorData = { TOF: [], ENC: [], HX: [] };
+
+// ─── Time unit ───
+let timeUnit = 'ms'; // 'ms', 's', 'min'
+function convertTime(ms) {
+    if (timeUnit === 's') return ms / 1000;
+    if (timeUnit === 'min') return ms / 60000;
+    return ms;
+}
+function timeUnitLabel() {
+    if (timeUnit === 's') return 's';
+    if (timeUnit === 'min') return 'min';
+    return 'ms';
+}
+
+// ─── State ───
+let currentTab = 'movimiento';
+let lastSensorTab = 'movimiento';
+let selectedVariable = 'dist';
+let ws = null;
+let isRecording = false;
+let lowPowerMode = false;
+let recordedData = [];
+let chartData = [];
+const MAX_CHART_POINTS = 200;
+let lastData = {};
+let currentChartStartTime = null;
+let lastDrawTime = 0; // Para throttling de dibujo
+
+// ─── DOM Elements ───
+const $ = id => document.getElementById(id);
+const $$ = sel => document.querySelectorAll(sel);
+
+// ─── Status Semaphore (Sync with Logo) ───
+function setStatus(text, color) {
+    const statusEl = $('sys-status');
+    const logoEl = $('sys-logo');
+    if (statusEl) {
+        statusEl.textContent = text;
+        statusEl.style.color = color;
+    }
+    if (logoEl) {
+        logoEl.style.borderColor = color;
+        logoEl.style.boxShadow = `0 0 15px ${color}66`; // 66 adds alpha to the hex
+    }
+}
+
+// ─── WebSocket Connection ───
+function connectWS() {
+    const host = location.hostname || '192.168.4.1';
+    ws = new WebSocket('ws://' + host + '/ws');
+
+    ws.onopen = () => {
+        setStatus('Conectado', '#14f0c5');
+        updateSensorBadges({ tof: true, encoder: true, loadcell: true });
+    };
+
+    ws.onclose = () => {
+        setStatus('Desconectado — Reconectando...', '#ff4d6a');
+        setTimeout(connectWS, 2000);
+    };
+
+    ws.onerror = () => {
+        ws.close();
+    };
+
+    ws.onmessage = (evt) => {
+        try {
+            const data = JSON.parse(evt.data);
+            
+            if (data.command === 'START' || data.command === 'RESET') {
+                currentChartStartTime = null;
+                chartData = [];
+                resetAngleState();
+                return;
+            }
+            
+            if (data.command === 'WAITING_TRIGGER') {
+                setStatus('Esperando movimiento...', '#f0b429');
+                $('btn-trigger').classList.add('recording');
+                $('btn-trigger').innerHTML = '🎯 Esperando...';
+                $('btn-trigger').style.display = 'none';
+                $('btn-trigger-stop').style.display = '';
+                return;
+            }
+
+            if (data.command === 'TRIGGER_START') {
+                setStatus('Grabando (Auto)', '#ff4d6a'); // Cambiado a rojo para grabar
+                $('btn-trigger-stop').innerHTML = '⏹ Grabando...';
+                sensorRecording.TOF = true;
+                sensorData.TOF = [];
+                chartData = [];
+                currentChartStartTime = null;
+                return;
+            }
+
+            if (data.command === 'TRIGGER_STOP') {
+                setStatus('Toma completa', '#a78bfa');
+                $('btn-trigger').classList.remove('recording');
+                $('btn-trigger').innerHTML = '🎯 Toma Auto';
+                $('btn-trigger').style.display = '';
+                $('btn-trigger-stop').style.display = 'none';
+                
+                ['TOF', 'ENC', 'HX'].forEach(s => sensorRecording[s] = false);
+                
+                const btnRec = $('btn-sensor-rec');
+                if (btnRec) {
+                    btnRec.classList.remove('recording');
+                    btnRec.innerHTML = '<span class="dot"></span> ▶️ Medir';
+                }
+                
+                if (isRecording) {
+                    isRecording = false;
+                    const gBtn = $('btn-record');
+                    if (gBtn) {
+                        gBtn.classList.remove('recording');
+                        gBtn.innerHTML = '<span class="dot"></span> Grabar';
+                    }
+                }
+                return;
+            }
+
+            // Ignorar actualizaciones si la pestaña actual no es de datos (config, python, etc)
+            // a menos que sean mensajes de configuración.
+            const isDataTab = ['movimiento', 'rotacion', 'fuerza'].includes(currentTab);
+
+            if (currentChartStartTime === null && typeof data.t === 'number') {
+                currentChartStartTime = data.t;
+            }
+            if (typeof data.t === 'number') {
+                data.rawT = data.t;
+                data.t = data.t - currentChartStartTime;
+            }
+            
+            lastData = data;
+
+            // Grabación por sensor (siempre activa en segundo plano si está marcada)
+            if (sensorRecording.TOF) sensorData.TOF.push({ ...data, recorded: Date.now() });
+            if (sensorRecording.ENC) sensorData.ENC.push({ ...data, recorded: Date.now() });
+            if (sensorRecording.HX)  sensorData.HX.push({ ...data, recorded: Date.now() });
+            
+            if (isRecording) {
+                recordedData.push({ ...data, recorded: Date.now() });
+            }
+
+            // Actualizar UI solo si es necesario
+            if (isDataTab) {
+                updateSensorCount();
+                updateDisplay(data);
+                pushChartPoint(data);
+                
+                const now = Date.now();
+                if (now - lastDrawTime > 60) { // ~16 FPS para la gráfica es suficiente y suave
+                    drawChart();
+                    lastDrawTime = now;
+                }
+            } else if (data.config) {
+                // Si estamos en Config, solo actualizar los badges y checkboxes
+                updateDisplay(data);
+            }
+        } catch (e) {
+            console.warn('[WS] Parse error', e);
+        }
+    };
+}
+
+// ─── Display Update ───
+function updateDisplay(data) {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf) return;
+    const varConf = tabConf.variables.find(v => v.key === selectedVariable);
+    if (!varConf) return;
+
+    const val = data[selectedVariable];
+    $('main-val').textContent = typeof val === 'number' ? val.toFixed(2) : '---';
+    $('main-unit').textContent = varConf.unit;
+
+    // Sub-metrics
+    tabConf.subMetrics.forEach((m, i) => {
+        const idx = i + 1;
+        $('sub-label-' + idx).textContent = m.label;
+        const mVal = data[m.key];
+        $('sub-val-' + idx).innerHTML =
+            (typeof mVal === 'number' ? mVal.toFixed(3) : '---') +
+            ' <small>' + m.unit + '</small>';
+    });
+
+    // Sensor badges
+    if (data.sensors) {
+        updateSensorBadges(data.sensors);
+    }
+    
+    // Config updates (feedback loop protection)
+    if (data.config) {
+        const tofEl = $('tof_model');
+        const srEl = $('sample_rate');
+        
+        // Solo actualizamos si el usuario NO está interactuando con el panel de configuración
+        const configVisible = $('config-panel') && $('config-panel').style.display !== 'none';
+        
+        if (!configVisible || (tofEl && document.activeElement !== tofEl)) {
+            if (data.config.tof_model && tofEl && tofEl.value != data.config.tof_model) {
+                tofEl.value = data.config.tof_model;
+            }
+        }
+        
+        if (!configVisible || (srEl && document.activeElement !== srEl)) {
+            // Si recibimos sample_rate, nos aseguramos de que el selector lo refleje
+            if (data.config.sample_rate && srEl && srEl.value != data.config.sample_rate) {
+                srEl.value = data.config.sample_rate;
+            } else if (!data.config.sample_rate && srEl) {
+                srEl.value = "10"; // Default to 100Hz (10ms) if not set
+            }
+        }
+
+        const usbLogEl = $('usb-auto-log');
+        if (data.config.usb_log !== undefined && usbLogEl && (!configVisible || document.activeElement !== usbLogEl)) {
+            usbLogEl.checked = data.config.usb_log;
+        }
+
+        const invEncEl = $('invert-encoder-check');
+        if (data.config.invert_encoder !== undefined && invEncEl && (!configVisible || document.activeElement !== invEncEl)) {
+            invEncEl.checked = data.config.invert_encoder;
+        }
+
+        // HX711 Filter & Stability Sync
+        const hxFilterEl = $('hx-filter-check');
+        const hxFilterCfgEl = $('config-hx-filter-check');
+        if (data.config.hx_filter !== undefined) {
+            if (hxFilterEl) hxFilterEl.checked = data.config.hx_filter;
+            if (hxFilterCfgEl) hxFilterCfgEl.checked = data.config.hx_filter;
+        }
+
+        const hxStabEl = $('hx-stability-check');
+        const hxStabCfgEl = $('config-hx-stability-check');
+        if (data.config.hx_high_stab !== undefined) {
+            if (hxStabEl) hxStabEl.checked = data.config.hx_high_stab;
+            if (hxStabCfgEl) hxStabCfgEl.checked = data.config.hx_high_stab;
+        }
+
+        if (data.config.tube_length !== undefined) {
+            if ($('tube_length') && document.activeElement !== $('tube_length')) {
+                $('tube_length').value = data.config.tube_length;
+            }
+            if ($('auto-stop-dist') && document.activeElement !== $('auto-stop-dist')) {
+                $('auto-stop-dist').value = data.config.tube_length;
+            }
+        }
+    }
+}
+
+function updateSensorBadges(sensors) {
+    $('badge-tof').className = 'badge ' + (sensors.tof ? 'online' : 'offline');
+    $('badge-enc').className = 'badge ' + (sensors.encoder ? 'online' : 'offline');
+    $('badge-hx').className = 'badge ' + (sensors.loadcell ? 'online' : 'offline');
+}
+
+// ─── Canvas Chart (Zero Dependencies) ───
+function pushChartPoint(data) {
+    const val = data[selectedVariable];
+    if (typeof val !== 'number') return;
+    chartData.push({ t: data.t || 0, v: val });
+    if (chartData.length > MAX_CHART_POINTS) chartData.shift();
+}
+
+function drawChart() {
+    const canvas = $('realtimeChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimización
+    const w = canvas.parentElement.clientWidth;
+    const h = canvas.parentElement.clientHeight;
+    
+    if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+    }
+
+    const pts = chartData;
+    if (pts.length < 2) {
+        ctx.fillStyle = '#0a0e1a';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#4a5568';
+        ctx.font = '13px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('Esperando datos...', w / 2, h / 2);
+        return;
+    }
+
+    // Find value range
+    let minV = Infinity, maxV = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+        const v = pts[i].v;
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+    }
+    const range = maxV - minV || 1;
+    const padY = range * 0.15;
+    minV -= padY;
+    maxV += padY;
+
+    const padL = 50, padR = 10, padT = 10, padB = 28;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#4a5568';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'right';
+    const numGridLines = 5;
+    for (let i = 0; i <= numGridLines; i++) {
+        const y = padT + (plotH / numGridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+        const labelVal = maxV - ((maxV - minV) / numGridLines) * i;
+        ctx.fillText(labelVal.toFixed(1), padL - 6, y + 3);
+    }
+
+    // Line color
+    const tabConf = TAB_CONFIG[currentTab];
+    const varConf = tabConf.variables.find(v => v.key === selectedVariable);
+    const lineColor = varConf ? varConf.color : '#00d4ff';
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < pts.length; i++) {
+        const x = padL + (i / (pts.length - 1)) * plotW;
+        const y = padT + plotH - ((pts[i].v - minV) / (maxV - minV)) * plotH;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Gradient fill
+    const r = parseInt(lineColor.slice(1, 3), 16) || 0;
+    const g = parseInt(lineColor.slice(3, 5), 16) || 0;
+    const b = parseInt(lineColor.slice(5, 7), 16) || 0;
+    const gradFill = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+    gradFill.addColorStop(0, `rgba(${r},${g},${b},0.2)`);
+    gradFill.addColorStop(1, `rgba(${r},${g},${b},0.0)`);
+    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.lineTo(padL, padT + plotH);
+    ctx.closePath();
+    ctx.fillStyle = gradFill;
+    ctx.fill();
+
+    // Current value dot
+    if (pts.length > 0) {
+        const last = pts[pts.length - 1];
+        const lx = padL + plotW;
+        const ly = padT + plotH - ((last.v - minV) / (maxV - minV)) * plotH;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+    }
+
+    // X Axis label
+    ctx.fillStyle = '#4a5568';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tiempo (' + timeUnitLabel() + ') →', w / 2, h - 4);
+}
+
+// (Dead switchTab removed — active version is below at line ~1140)
+
+function updateSensorCount() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const el = $('sensor-count');
+    if (!el || !tabConf || !tabConf.sensor) return;
+    const n = sensorData[tabConf.sensor].length;
+    el.textContent = n + ' muestras';
+}
+
+// ─── Per-sensor Recording ───
+function toggleSensorRecording() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return toggleRecording();
+    const sensor = tabConf.sensor;
+    sensorRecording[sensor] = !sensorRecording[sensor];
+    const btn = $('btn-sensor-rec');
+    if (sensorRecording[sensor]) {
+        sensorData[sensor] = [];
+        chartData = []; 
+        currentChartStartTime = null; 
+        btn.classList.add('recording');
+        btn.innerHTML = '<span class="dot"></span> ⏹ Detener';
+        setStatus('Midiendo...', '#ff4d6a'); // Rojo para medir
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('START_' + sensor);
+    } else {
+        btn.classList.remove('recording');
+        btn.innerHTML = '<span class="dot"></span> ▶️ Medir';
+        setStatus('Conectado', '#14f0c5');
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP_' + sensor);
+        
+        // Auto-save to IndexedDB for offline sync (H5)
+        if (sensorData[sensor].length > 0) {
+            const autoExportData = prepareExportData(sensor);
+            if (typeof saveToIndexedDB === 'function') {
+                saveToIndexedDB(autoExportData).then(() => {
+                    console.log('[Auto-Save] Experiment cached in IndexedDB');
+                }).catch(err => console.error('[Auto-Save] Error:', err));
+            }
+        }
+    }
+}
+
+// Cumulative angle state
+let prevAngleRaw = null;
+let cumulativeAngle = 0;
+
+function resetAngleState() {
+    prevAngleRaw = null;
+    cumulativeAngle = 0;
+}
+
+function unwrapAngle(raw) {
+    if (raw === undefined || raw === null) return 0;
+    if (prevAngleRaw === null) {
+        prevAngleRaw = raw;
+        cumulativeAngle = raw;
+        return cumulativeAngle;
+    }
+    let diff = raw - prevAngleRaw;
+    // Handle wrap around for 0-360 sensor
+    if (diff > 180) diff -= 360;
+    else if (diff < -180) diff += 360;
+    
+    cumulativeAngle += diff;
+    prevAngleRaw = raw;
+    return cumulativeAngle;
+}
+
+// Helper to prepare data for export/sync
+function prepareExportData(sensor) {
+    const tabConf = Object.values(TAB_CONFIG).find(t => t.sensor === sensor);
+    const data = sensorData[sensor];
+    return {
+        device: 'Physys-Lab', 
+        version: 'v9.0', 
+        sensor: sensor,
+        tab: tabConf ? tabConf.title : 'Desconocido',
+        exported: new Date().toISOString(),
+        timeUnit: timeUnit,
+        duration_ms: data.length > 1 ? data[data.length - 1].t - data[0].t : 0,
+        samples: data.length,
+        data: data.map(d => {
+            const row = { t: convertTime(d.t) };
+            if (tabConf) {
+                tabConf.variables.forEach(v => { 
+                    // Export specific keys
+                    if (d[v.key] !== undefined) {
+                        row[v.key] = d[v.key];
+                    } else if (sensor === 'ENC' && v.key === 'angleDeg') {
+                        row[v.key] = d.angleDeg || 0;
+                    }
+                });
+            }
+            return row;
+        })
+    };
+}
+
+// ─── Global Recording (header) ───
+function toggleRecording() {
+    isRecording = !isRecording;
+    const btn = $('btn-record');
+    if (isRecording) {
+        recordedData = [];
+        chartData = [];
+        currentChartStartTime = null;
+        btn.classList.add('recording');
+        btn.innerHTML = '<span class="dot"></span> Grabando...';
+        setStatus('Grabando...', '#ff4d6a');
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('START');
+    } else {
+        btn.classList.remove('recording');
+        btn.innerHTML = '<span class="dot"></span> Grabar';
+        setStatus('Conectado', '#14f0c5');
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('STOP');
+
+        // Auto-save global recording to IndexedDB (H5)
+        if (recordedData.length > 0) {
+            const autoExportData = {
+                device: 'Physys-Lab',
+                version: 'v9.0',
+                sensor: 'GLOBAL',
+                tab: 'Global Recording',
+                exported: new Date().toISOString(),
+                timeUnit: timeUnit,
+                duration_ms: recordedData.length > 1 ? recordedData[recordedData.length - 1].t - recordedData[0].t : 0,
+                samples: recordedData.length,
+                data: recordedData.map(d => ({ ...d, t: convertTime(d.t) }))
+            };
+            if (typeof saveToIndexedDB === 'function') {
+                saveToIndexedDB(autoExportData).catch(err => console.error('[Auto-Save Global] Error:', err));
+            }
+        }
+    }
+}
+
+// ─── Tare (per tab) ───
+function tareSensor() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TARE');
+        const btn = $('btn-sensor-tare');
+        if (btn) { btn.textContent = '✓ Tarado'; setTimeout(() => { btn.textContent = '⚖️ Tara'; }, 2000); }
+    }
+}
+
+// ─── Digital Filter & Stability (Load Cell) ───
+function toggleHxFilter() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TOGGLE_HX_FILTER');
+    }
+}
+
+function toggleHxStability() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TOGGLE_HX_STABILITY');
+    }
+}
+
+function toggleTriggerMode() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        const stopDist = parseInt($('auto-stop-dist').value) || 0;
+        ws.send('SET_TUBE:' + stopDist);
+        ws.send('START_TRIGGER');
+    }
+}
+
+function stopTriggerMode() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('STOP');
+    }
+    $('btn-trigger').style.display = '';
+    $('btn-trigger-stop').style.display = 'none';
+    $('btn-trigger').innerHTML = '🎯 Toma Auto';
+    $('btn-trigger').classList.remove('recording');
+    sensorRecording.TOF = false;
+}
+
+function exportToUsb() {
+    if (confirm('¿Deseas exportar los datos al USB?\n\n1. El ESP32 se reiniciará.\n2. El LED parpadeará AZUL.\n3. Conecta el pendrive en ese momento.\n4. Cuando el LED parpadee VERDE, ya puedes retirarlo.')) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('USB_EXPORT');
+            alert('Reiniciando... El sistema entrará en modo copia en 3 segundos.');
+        } else {
+            alert('Error: No hay conexión con el dispositivo.');
+        }
+    }
+}
+
+function rebootESP() {
+    if (confirm('¿Deseas reiniciar el dispositivo?')) {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('REBOOT');
+    }
+}
+
+function toggleInvertEncoder() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('INVERT_ENC');
+        // El ESP32 enviará el estado actualizado en el siguiente mensaje de config
+    }
+}
+
+// ─── Export per sensor (CSV) ───
+function exportSensorCSV() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return exportJSON();
+    const sensor = tabConf.sensor;
+    const data = sensorData[sensor];
+    if (!data || data.length === 0) { alert('No hay datos grabados para ' + tabConf.title); return; }
+    
+    // Header
+    const exportData = prepareExportData(sensor);
+    
+    // Generar CSV string
+    let csv = 't(' + timeUnitLabel() + ')';
+    tabConf.variables.forEach(v => {
+        // Sanitizar unidades (evitar símbolos especiales en CSV para mejor compatibilidad móvil)
+        let unit = v.unit.replace('°', 'deg');
+        csv += ',' + v.key + '(' + unit + ')';
+    });
+    csv += '\n';
+    
+    // Rows
+    exportData.data.forEach(d => {
+        csv += d.t.toFixed(3);
+        tabConf.variables.forEach(v => {
+            let val = d[v.key];
+            if (typeof val !== 'number') val = 0;
+            csv += ',' + val.toFixed(4);
+        });
+        csv += '\r\n'; // Usar CRLF para mejor compatibilidad con Excel y Móviles
+    });
+
+    const filename = 'physys_' + sensor + '_' + Date.now() + '.csv';
+    
+    // Descargar/Compartir en el celular
+    downloadCSV(csv, filename);
+    
+    const btn = $('btn-sensor-export');
+    const oldText = btn.innerHTML;
+    btn.innerHTML = '✅ Exportando...';
+    setTimeout(() => btn.innerHTML = oldText, 2500);
+
+    // Backup en ESP32
+    fetch('/api/data', { 
+        method: 'POST', 
+        headers: {'Content-Type':'application/json'}, 
+        body: JSON.stringify(exportData) 
+    }).catch(() => {});
+    
+    if (typeof saveToIndexedDB === 'function') saveToIndexedDB(exportData).catch(() => {});
+
+    // Mobile feedback and easy copy for WhatsApp
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        setTimeout(() => {
+            const copyBtn = confirm('¿Deseas COPIAR los datos al portapapeles para pegarlos directamente en WhatsApp?');
+            if (copyBtn) {
+                // Formato simplificado para WhatsApp (pocas líneas o resumen)
+                const header = 't(' + timeUnitLabel() + '),' + tabConf.variables.map(v => v.label).join(',') + '\n';
+                const rows = exportData.data.slice(0, 100).map(d => {
+                    let r = [d.t.toFixed(2)];
+                    tabConf.variables.forEach(v => r.push((d[v.key] || 0).toFixed(2)));
+                    return r.join(',');
+                }).join('\n');
+                const footer = data.length > 100 ? '\n... (truncado a 100 muestras)' : '';
+                
+                navigator.clipboard.writeText(header + rows + footer).then(() => {
+                    alert('¡Copiado! Ya puedes pegarlo en el chat.');
+                }).catch(() => {
+                    // Fallback
+                    const area = document.createElement('textarea');
+                    area.value = header + rows + footer;
+                    document.body.appendChild(area);
+                    area.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(area);
+                    alert('¡Copiado (método alternativo)!');
+                });
+            }
+        }, 1500);
+    }
+}
+
+// ─── Export All (header button - JSON) ───
+function exportJSON() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) {
+        alert('No hay un sensor activo para exportar.');
+        return;
+    }
+    const sensor = tabConf.sensor;
+    const data = sensorData[sensor];
+    if (!data || data.length === 0) { 
+        alert('No hay datos grabados para ' + tabConf.title); 
+        return; 
+    }
+    
+    const exportData = prepareExportData(sensor);
+    
+    downloadJSON(exportData, 'physys_' + sensor + '_' + Date.now() + '.json');
+    
+    const btn = $('btn-export');
+    const oldText = btn.innerHTML;
+    btn.innerHTML = '✅ JSON Guardado';
+    setTimeout(() => btn.innerHTML = oldText, 2500);
+
+    fetch('/api/data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(exportData) })
+        .then(r=>r.json()).catch(()=>{});
+        
+    if (typeof saveToIndexedDB === 'function') saveToIndexedDB(exportData).catch(()=>{});
+}
+
+function downloadJSON(data, filename) {
+    const jsonStr = JSON.stringify(data, null, 2);
+    
+    // Intento de usar Web Share API (optimizado para celulares)
+    if (navigator.share && navigator.canShare) {
+        // En móviles es más seguro compartir como .txt si .json es bloqueado
+        const safeFilename = filename.replace('.json', '.txt');
+        const file = new File([jsonStr], safeFilename, { type: 'text/plain' });
+        
+        if (navigator.canShare({ files: [file] })) {
+            navigator.share({
+                title: 'Datos Physys Lab',
+                text: 'Aquí están los datos del experimento.',
+                files: [file]
+            }).then(() => {
+                console.log('Archivo compartido con éxito');
+            }).catch(e => {
+                console.log('Error compartiendo o cancelado:', e);
+                showExportModal(jsonStr, filename);
+            });
+            return; // Exit here if share was triggered
+        }
+    }
+    
+    // Fallback para PC o si Share API no está disponible
+    showExportModal(jsonStr, filename);
+}
+
+function downloadCSV(csvStr, filename) {
+    if (navigator.share && navigator.canShare) {
+        const file = new File([csvStr], filename, { type: 'text/csv' });
+        if (navigator.canShare({ files: [file] })) {
+            navigator.share({
+                title: 'Datos Physys Lab CSV',
+                text: 'Aquí están los datos del experimento en formato CSV.',
+                files: [file]
+            }).then(() => {
+                console.log('Archivo compartido con éxito');
+            }).catch(e => {
+                console.log('Error compartiendo o cancelado:', e);
+                showExportModal(csvStr, filename);
+            });
+            return;
+        }
+    }
+    showExportModal(csvStr, filename);
+}
+
+function showExportModal(contentStr, filename) {
+    const isCSV = filename.endsWith('.csv');
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0'; overlay.style.left = '0';
+    overlay.style.width = '100%'; overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.85)';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = '9999';
+    overlay.style.backdropFilter = 'blur(4px)';
+
+    const modal = document.createElement('div');
+    modal.className = 'glass-card';
+    modal.style.background = '#1e293b';
+    modal.style.padding = '24px';
+    modal.style.borderRadius = '16px';
+    modal.style.width = '90%';
+    modal.style.maxWidth = '450px';
+    modal.style.color = '#fff';
+    modal.style.boxShadow = '0 20px 50px rgba(0,0,0,0.6)';
+    modal.style.border = '1px solid rgba(255,255,255,0.1)';
+
+    const title = document.createElement('h3');
+    title.textContent = isCSV ? '📥 Exportar CSV' : '📤 Exportar JSON';
+    title.style.margin = '0 0 10px 0';
+    title.style.color = isCSV ? '#14f0c5' : '#f0b429';
+
+    const desc = document.createElement('p');
+    desc.textContent = 'Archivo: ' + filename;
+    desc.style.fontSize = '13px';
+    desc.style.color = '#94a3b8';
+    desc.style.marginBottom = '20px';
+
+    const area = document.createElement('textarea');
+    area.value = contentStr;
+    area.readOnly = true;
+    area.style.width = '100%';
+    area.style.height = '120px';
+    area.style.background = '#0f172a';
+    area.style.color = '#94a3b8';
+    area.style.border = '1px solid #334155';
+    area.style.borderRadius = '8px';
+    area.style.padding = '10px';
+    area.style.fontSize = '11px';
+    area.style.fontFamily = 'monospace';
+    area.style.marginBottom = '15px';
+    area.style.resize = 'none';
+
+    // Botón Compartir (Solo si está disponible)
+    if (navigator.share) {
+        const btnShare = document.createElement('button');
+        btnShare.innerHTML = '<span>🔗</span> Compartir Archivo';
+        btnShare.className = 'btn-action btn-teal';
+        btnShare.style.width = '100%';
+        btnShare.style.marginBottom = '12px';
+        btnShare.style.padding = '14px';
+        btnShare.style.backgroundColor = '#0ea5e9';
+        btnShare.onclick = () => {
+            const file = new File([contentStr], filename, { type: isCSV ? 'text/csv' : 'application/json' });
+            navigator.share({
+                title: 'Physys Lab Export',
+                files: [file]
+            }).catch(e => console.warn('Share failed', e));
+        };
+        modal.appendChild(btnShare);
+    }
+
+    const btnDescargar = document.createElement('button');
+    btnDescargar.innerHTML = '<span>⬇️</span> Descargar Archivo';
+    btnDescargar.className = 'btn-action btn-gold';
+    btnDescargar.style.width = '100%';
+    btnDescargar.style.marginBottom = '12px';
+    btnDescargar.style.padding = '14px';
+    btnDescargar.onclick = () => { triggerDownloadLink(contentStr, filename); };
+
+    const btnCopiar = document.createElement('button');
+    btnCopiar.textContent = '📋 Copiar al Portapapeles';
+    btnCopiar.className = 'btn-action btn-teal';
+    btnCopiar.style.width = '100%';
+    btnCopiar.style.padding = '14px';
+    btnCopiar.style.marginBottom = '12px';
+    btnCopiar.onclick = () => {
+        area.select();
+        area.setSelectionRange(0, 99999);
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(contentStr).then(() => {
+                    btnCopiar.textContent = '✅ ¡Copiado!';
+                    setTimeout(() => btnCopiar.textContent = '📋 Copiar al Portapapeles', 2000);
+                });
+            } else {
+                document.execCommand('copy');
+                btnCopiar.textContent = '✅ ¡Copiado!';
+                setTimeout(() => btnCopiar.textContent = '📋 Copiar al Portapapeles', 2000);
+            }
+        } catch (err) {
+            alert('Por favor, selecciona el texto de la caja y cópialo manualmente.');
+        }
+    };
+
+    // ─── Separador Desmos ───
+    const desmosSep = document.createElement('div');
+    desmosSep.style.cssText = 'text-align:center;color:#64748b;font-size:11px;margin:14px 0 8px;border-top:1px solid #334155;padding-top:10px;letter-spacing:0.5px;text-transform:uppercase';
+    desmosSep.textContent = '📊 Desmos & Hojas de Cálculo';
+
+    // ─── Botón A: Copiar para Desmos (TSV) ───
+    const btnDesmosTSV = document.createElement('button');
+    btnDesmosTSV.innerHTML = '<span>📊</span> Copiar para Desmos (TSV)';
+    btnDesmosTSV.className = 'btn-action';
+    btnDesmosTSV.style.cssText = 'width:100%;margin-bottom:12px;padding:14px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px';
+    btnDesmosTSV.onclick = () => {
+        const tabConf = TAB_CONFIG[currentTab];
+        const sensor = tabConf ? tabConf.sensor : null;
+        const data = sensor ? sensorData[sensor] : null;
+        if (!data || data.length === 0) { alert('No hay datos para copiar.'); return; }
+        const vars = tabConf.variables;
+        const tsvHeader = 't(' + timeUnitLabel() + ')\t' + vars.map(v => v.label).join('\t');
+        const tsvRows = data.slice(0, 1000).map(d => {
+            let cols = [convertTime(d.t).toFixed(3)];
+            vars.forEach(v => cols.push((d[v.key] !== undefined ? d[v.key] : 0).toFixed(4)));
+            return cols.join('\t');
+        }).join('\n');
+        const tsv = tsvHeader + '\n' + tsvRows;
+        const doCopy = (text) => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            return Promise.resolve();
+        };
+        doCopy(tsv).then(() => {
+            const truncMsg = data.length > 1000 ? ' (1000/' + data.length + ' filas)' : '';
+            btnDesmosTSV.innerHTML = '✅ ¡TSV Copiado!' + truncMsg;
+            setTimeout(() => btnDesmosTSV.innerHTML = '<span>📊</span> Copiar para Desmos (TSV)', 3000);
+        }).catch(() => alert('Error al copiar. Intenta desde el textarea.'));
+    };
+
+    // ─── Botón B: Abrir en Desmos ───
+    const btnOpenDesmos = document.createElement('button');
+    btnOpenDesmos.innerHTML = '<span>🔗</span> Abrir en Desmos';
+    btnOpenDesmos.className = 'btn-action';
+    btnOpenDesmos.style.cssText = 'width:100%;margin-bottom:12px;padding:14px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px';
+    btnOpenDesmos.onclick = () => {
+        const tabConf = TAB_CONFIG[currentTab];
+        const sensor = tabConf ? tabConf.sensor : null;
+        const data = sensor ? sensorData[sensor] : null;
+        if (!data || data.length === 0) { alert('No hay datos para enviar a Desmos.'); return; }
+        const vars = tabConf.variables;
+        const tsvHeader = 't(' + timeUnitLabel() + ')\t' + vars.map(v => v.label).join('\t');
+        const tsvRows = data.slice(0, 1000).map(d => {
+            let cols = [convertTime(d.t).toFixed(3)];
+            vars.forEach(v => cols.push((d[v.key] !== undefined ? d[v.key] : 0).toFixed(4)));
+            return cols.join('\t');
+        }).join('\n');
+        const tsv = tsvHeader + '\n' + tsvRows;
+        const doCopy = (text) => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            return Promise.resolve();
+        };
+        doCopy(tsv).then(() => {
+            window.open('https://www.desmos.com/calculator', '_blank');
+            btnOpenDesmos.innerHTML = '✅ Desmos abierto — Pega (Ctrl+V) en línea vacía';
+            setTimeout(() => btnOpenDesmos.innerHTML = '<span>🔗</span> Abrir en Desmos', 4000);
+        }).catch(() => {
+            window.open('https://www.desmos.com/calculator', '_blank');
+            alert('Copia los datos del textarea y pégalos en Desmos.');
+        });
+    };
+
+    const btnCerrar = document.createElement('button');
+    btnCerrar.textContent = 'Cerrar';
+    btnCerrar.className = 'btn-action btn-warn';
+    btnCerrar.style.width = '100%';
+    btnCerrar.style.padding = '10px';
+    btnCerrar.style.marginTop = '10px';
+    btnCerrar.style.background = 'transparent';
+    btnCerrar.style.border = '1px solid #ef4444';
+    btnCerrar.onclick = () => document.body.removeChild(overlay);
+
+    modal.appendChild(title);
+    modal.appendChild(desc);
+    modal.appendChild(area);
+    modal.appendChild(btnCopiar);
+    modal.appendChild(btnDescargar);
+    modal.appendChild(desmosSep);
+    modal.appendChild(btnDesmosTSV);
+    modal.appendChild(btnOpenDesmos);
+    modal.appendChild(btnCerrar);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
+
+function triggerDownloadLink(content, filename) {
+    const isCSV = filename.endsWith('.csv');
+    const mime = isCSV ? 'text/csv' : 'application/json';
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a'); 
+    a.href = url; 
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    
+    // Pequeño truco para algunos navegadores móviles
+    setTimeout(() => {
+        a.click();
+        console.log('Download triggered for:', filename);
+        // Dejamos el objeto vivo por 30 segundos para dar tiempo al sistema de descarga
+        setTimeout(() => {
+            if (document.body.contains(a)) document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 30000); 
+    }, 100);
+}
+
+// ─── Save Config ───
+function saveSampleRate() {
+    const rate = $('sample_rate').value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_RATE:' + rate);
+        const btn = $('btn-save-rate');
+        btn.textContent = '✓ Guardado';
+        alert('Frecuencia de muestreo actualizada a ' + (1000/rate).toFixed(0) + ' Hz. El cambio se aplicará de inmediato y persistirá tras el reinicio.');
+        setTimeout(() => btn.textContent = '💾 Aplicar Frecuencia', 2000);
+    }
+}
+
+// ─── Clear Local (Browser) data ───
+function clearLocalData() {
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf || !tabConf.sensor) return;
+    const sensor = tabConf.sensor;
+    if (!confirm('¿Limpiar gráfica y borrar ' + (sensorData[sensor] ? sensorData[sensor].length : 0) + ' muestras de pantalla?')) return;
+    sensorData[sensor] = [];
+    chartData = [];
+    updateSensorCount();
+    drawChart();
+}
+
+// ─── Clear ESP32 memory (Internal Flash) ───
+function clearEspFiles() {
+    if (!confirm('¿Borrar permanentemente TODOS los archivos de experimentos guardados en la memoria interna del ESP32?')) return;
+    fetch('/api/data/clear', { method: 'DELETE' })
+        .then(r => r.json())
+        .then(d => { 
+            alert('✓ ' + d.deleted + ' archivos eliminados.\nMemoria libre: ' + (d.free/1024).toFixed(0) + ' KB'); 
+            fetchSystemInfo(); 
+        })
+        .catch(e => alert('Error al borrar archivos: ' + e.message));
+}
+
+// ─── Low Power Mode ───
+function toggleLowPower() {
+    lowPowerMode = !lowPowerMode;
+    const btn = $('btn-save');
+    if (lowPowerMode) {
+        btn.style.background = 'rgba(20, 240, 197, 0.3)';
+        btn.title = 'Modo Ahorro ACTIVO';
+    } else {
+        btn.style.background = '';
+        btn.title = 'Interruptor Modo Ahorro';
+    }
+}
+
+// ─── Fetch System Info ───
+function fetchSystemInfo() {
+    fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+            $('heap-info').textContent = (data.heap / 1024).toFixed(0) + ' KB';
+            $('psram-info').textContent = (data.psram / 1024).toFixed(0) + ' KB';
+            $('uptime-info').textContent = data.uptime;
+            
+            // Sincronizar selectores de configuración si vienen en el status
+            if (data.config) {
+                if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
+                if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
+                if (data.config.usb_log !== undefined) $('usb-auto-log').checked = data.config.usb_log;
+            }
+            if (data.sensors) {
+                updateSensorBadges(data.sensors);
+            }
+        })
+        .catch(() => {});
+
+    fetch('/api/storage')
+        .then(r => r.json())
+        .then(data => {
+            const pct = data.data ? (data.data.used / data.data.total * 100) : 0;
+            $('storage-fill').style.width = pct.toFixed(1) + '%';
+            $('storage-text').textContent =
+                (data.data.used / 1024).toFixed(0) + ' KB / ' +
+                (data.data.total / 1024).toFixed(0) + ' KB (' + pct.toFixed(1) + '%)';
+        })
+        .catch(() => {});
+}
+
+// ─── Python Examples ───
+const PYTHON_EXAMPLES = {
+    tof: `# ═════════════════════════════════════════════
+# Ejemplo 1: Cinemática Lineal con VL53L0X (ToF)
+# ═════════════════════════════════════════════
+# Sensor: VL53L0X (Time-of-Flight) en I2C 0x29
+# Variables: dist (mm), vel (m/s), acc (m/s²)
+
+# Configuración del experimento
+nombre = "Caída Libre"
+sensor = "VL53L0X"
+frecuencia_hz = 20
+duracion_s = 10
+
+# Rango válido de mediciones
+dist_min = 30    # mm (mínimo del sensor)
+dist_max = 2000  # mm (máximo práctico)
+
+# Cálculos derivados
+# La velocidad y aceleración se calculan automáticamente
+# a partir de las lecturas de distancia (derivada numérica).
+#
+# Resultados esperados para caída libre:
+#   acc ≈ -9.81 m/s² (gravedad)
+#   vel = vel_0 + acc * t
+#   dist = dist_0 + vel_0 * t + 0.5 * acc * t²
+
+# Filtro de datos
+filtrar_outliers = True
+ventana_promedio = 3  # Promedio móvil de N muestras
+`,
+    encoder: `# ═════════════════════════════════════════════
+# Ejemplo 2: Cinemática Angular con AS5600
+# ═════════════════════════════════════════════
+# Sensor: AS5600 (Encoder Magnético) en I2C 0x36
+# Variables: angleDeg (°), angleRad (rad),
+#            angVel (rad/s), angAcc (rad/s²)
+
+# Configuración del experimento
+nombre = "Péndulo Simple"
+sensor = "AS5600"
+frecuencia_hz = 20
+duracion_s = 30
+
+# Parámetros del péndulo
+longitud_m = 0.5       # Longitud del hilo (metros)
+masa_kg = 0.1          # Masa de la pesa (kg)
+angulo_inicial_deg = 15 # Ángulo inicial (grados)
+
+# Período teórico (pequeñas oscilaciones)
+import math
+g = 9.81
+T_teorico = 2 * math.pi * math.sqrt(longitud_m / g)
+# T ≈ 1.42 s para L = 0.5 m
+
+# Frecuencia angular natural
+omega_n = math.sqrt(g / longitud_m)
+# ω ≈ 4.43 rad/s
+
+# Análisis esperado:
+#   θ(t) = θ_0 * cos(ω_n * t)
+#   ω(t) = -θ_0 * ω_n * sin(ω_n * t)
+#   α(t) = -θ_0 * ω_n² * cos(ω_n * t)
+`,
+    loadcell: `# ═════════════════════════════════════════════
+# Ejemplo 3: Dinámica con HX711 (Celda de Carga)
+# ═════════════════════════════════════════════
+# Sensor: HX711 en GPIO6 (DT) + GPIO7 (SCK)
+# Variables: weight (g), mass (kg), weightN (N)
+
+# Configuración del experimento
+nombre = "Ley de Hooke"
+sensor = "HX711"
+frecuencia_hz = 10
+duracion_s = 60
+
+# Parámetros del resorte
+k_resorte = 25.0    # Constante elástica (N/m)
+x_natural = 0.15    # Longitud natural (metros)
+
+# Procedimiento:
+# 1. Tarar la celda (enviar comando TARE desde la web)
+# 2. Colgar masas incrementales: 50g, 100g, 150g, 200g
+# 3. Registrar peso (N) y elongación (m) para cada masa
+#
+# Ley de Hooke: F = k * Δx
+# Donde:
+#   F = peso medido (weightN) en Newtons
+#   k = constante del resorte (N/m)
+#   Δx = elongación = x_actual - x_natural
+
+# Calibración de la celda
+# La escala (set_scale) se ajusta experimentalmente.
+# Valor actual: 420.0 (modificar en main.cpp si es necesario)
+#
+# Para calibrar:
+# 1. Colocar masa conocida (ej: 100g)
+# 2. Leer valor crudo
+# 3. Dividir: escala = valor_crudo / masa_conocida
+`
+};
+
+// ─── GPIO Viewer ───
+let gvInterval = null;
+let gvActive = false;
+
+function renderGpioPins(pins) {
+    const leftCol = $('gv-left-pins');
+    const rightCol = $('gv-right-pins');
+    if (!leftCol || !rightCol) return;
+
+    // Split: GPIO 0-21 = left, 35-48 = right
+    const leftPins = pins.filter(p => p.g <= 21);
+    const rightPins = pins.filter(p => p.g >= 35);
+
+    leftCol.innerHTML = leftPins.map(p =>
+        `<div class="gv-pin fn-${p.f}">
+            <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
+            <span class="gv-pin-num">${p.g}</span>
+            <span class="gv-pin-label">${p.l}</span>
+        </div>`
+    ).join('');
+
+    rightCol.innerHTML = rightPins.map(p =>
+        `<div class="gv-pin fn-${p.f}">
+            <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
+            <span class="gv-pin-num">${p.g}</span>
+            <span class="gv-pin-label">${p.l}</span>
+        </div>`
+    ).join('');
+}
+
+function pollGpio() {
+    fetch('/api/gpio')
+        .then(r => r.json())
+        .then(data => {
+            renderGpioPins(data.pins);
+            $('gv-timestamp').textContent = 'Uptime: ' + (data.t / 1000).toFixed(1) + 's';
+        })
+        .catch(() => {
+            $('gv-timestamp').textContent = 'Sin conexión';
+        });
+}
+
+function startGpioPolling() {
+    if (gvInterval) clearInterval(gvInterval);
+    const rate = parseInt($('gv-rate').value) || 1000;
+    pollGpio();
+    gvInterval = setInterval(pollGpio, rate);
+    gvActive = true;
+}
+
+function stopGpioPolling() {
+    if (gvInterval) { clearInterval(gvInterval); gvInterval = null; }
+    gvActive = false;
+}
+
+// ─── Tab Switch (Sensor Dropdown + Icon Nav) ───
+function switchTab(tabName) {
+    try {
+        currentTab = tabName;
+        chartData = [];
+
+        const pythonPanel = $('python-panel');
+        const gpioPanel = $('gpio-viewer-panel');
+        const configPanel = $('config-panel');
+        const mainLayout = document.querySelector('.main-layout');
+
+        // Reset visibility
+        if (mainLayout) mainLayout.style.display = 'none';
+        if (pythonPanel) pythonPanel.style.display = 'none';
+        if (gpioPanel) gpioPanel.style.display = 'none';
+        if (configPanel) configPanel.style.display = 'none';
+        
+        stopGpioPolling();
+
+        // Sync nav icon active states
+        const cfgBtn = $('btn-nav-config');
+        const gpioBtn = $('btn-nav-gpio');
+        if (cfgBtn) cfgBtn.classList.toggle('active', tabName === 'config');
+        if (gpioBtn) gpioBtn.classList.toggle('active', tabName === 'gpioview');
+
+        // Sync sensor dropdown
+        const sensorSelect = $('sensor-select');
+        if (sensorSelect && ['movimiento', 'rotacion', 'fuerza'].includes(tabName)) {
+            sensorSelect.value = tabName;
+            lastSensorTab = tabName;
+        }
+
+        if (tabName === 'python') {
+            if (pythonPanel) pythonPanel.style.display = 'block';
+            updateLineNumbers();
+        } else if (tabName === 'gpioview') {
+            if (gpioPanel) gpioPanel.style.display = 'block';
+            startGpioPolling();
+        } else if (tabName === 'config') {
+            if (configPanel) configPanel.style.display = 'block';
+            fetchConfig();
+        } else {
+            // Tab de sensor normal
+            if (mainLayout) mainLayout.style.display = '';
+            
+            const tabConf = TAB_CONFIG[tabName];
+            if (!tabConf) return;
+
+            $('display-title').textContent = tabConf.title;
+
+            // Populate variable selector
+            const sel = $('graph-variable');
+            sel.innerHTML = '';
+            tabConf.variables.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.key;
+                opt.textContent = v.label + ' (' + v.unit + ')';
+                sel.appendChild(opt);
+            });
+            selectedVariable = tabConf.variables[0].key;
+
+            // Sync sensor toolbar with current tab
+            const sensor = tabConf.sensor;
+            const btn = $('btn-sensor-rec');
+            if (btn) {
+                if (sensorRecording[sensor]) {
+                    btn.classList.add('recording');
+                    btn.innerHTML = '<span class="dot"></span> ⏹ Detener';
+                } else {
+                    btn.classList.remove('recording');
+                    btn.innerHTML = '<span class="dot"></span> ▶️ Medir';
+                }
+            }
+            
+            // Per-tab buttons visibility
+            const invertBtn = $('btn-sensor-invert');
+            const resetEncBtn = $('btn-sensor-reset-enc');
+            const tareBtn = $('btn-sensor-tare');
+            const hxControls = $('hx-controls-container');
+
+            if (invertBtn) invertBtn.style.display = (tabName === 'rotacion') ? '' : 'none';
+            if (resetEncBtn) resetEncBtn.style.display = (tabName === 'rotacion') ? '' : 'none';
+            if (tareBtn) tareBtn.style.display = (tabName === 'fuerza') ? '' : 'none';
+            if (hxControls) hxControls.style.display = (tabName === 'fuerza') ? 'flex' : 'none';
+            
+            // Update display with last data if available
+            if (Object.keys(lastData).length > 0) {
+                updateDisplay(lastData);
+            }
+            
+            // Force chart redraw after panel switch
+            setTimeout(drawChart, 50);
+        }
+        
+        console.log('[Tab] switched to:', tabName);
+        updateSensorCount();
+        
+    } catch (err) {
+        console.error('[Tab] Switch error:', err);
+        const mainLayout = document.querySelector('.main-layout');
+        if (mainLayout) mainLayout.style.display = '';
+    }
+}
+
+// ─── Consolidated Save All Config ───
+function saveAllConfig() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) { alert('Sin conexión'); return; }
+    const model = $('tof_model').value;
+    const rate = $('sample_rate').value;
+    const tube = $('tube_length') ? $('tube_length').value : '0';
+    ws.send('SET_TOF:' + model);
+    ws.send('SET_RATE:' + rate);
+    ws.send('SET_TUBE:' + tube);
+    if ($('auto-stop-dist')) $('auto-stop-dist').value = tube; // Sincronizar visualmente
+    const btn = $('btn-save-config');
+    if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = '💾 Guardar Configuración'; }, 2000); }
+    alert('Configuración guardada (ToF: ' + model + ', Freq: ' + (1000/rate).toFixed(0) + ' Hz, Tubo: ' + tube + ' mm).\n\nSe aplicará tras reinicio si cambió el sensor ToF.');
+}
+
+// ─── Export Modal (unified: CSV, JSON, USB, Share) ───
+function openExportModal() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const sensor = tabConf ? tabConf.sensor : null;
+    const data = sensor ? sensorData[sensor] : [];
+    const count = data.length;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;justify-content:center;align-items:center;z-index:9999;backdrop-filter:blur(4px)';
+
+    const modal = document.createElement('div');
+    modal.className = 'glass-card';
+    modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:16px;width:90%;max-width:400px;color:#fff;box-shadow:0 20px 50px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1)';
+
+    const title = document.createElement('h3');
+    title.textContent = '📤 Exportar Datos';
+    title.style.cssText = 'margin:0 0 6px 0;color:#f0b429';
+    modal.appendChild(title);
+
+    const info = document.createElement('p');
+    info.style.cssText = 'font-size:13px;color:#94a3b8;margin-bottom:18px';
+    info.textContent = tabConf ? tabConf.title + ' — ' + count + ' muestras' : 'Sin sensor activo';
+    modal.appendChild(info);
+
+    function mkBtn(label, color, fn) {
+        const b = document.createElement('button');
+        b.innerHTML = label;
+        b.className = 'btn-action';
+        b.style.cssText = 'width:100%;padding:13px;margin-bottom:10px;background:' + color + ';border-color:' + color + ';color:#fff;font-size:14px;border-radius:10px';
+        b.onclick = fn;
+        modal.appendChild(b);
+    }
+
+    if (count > 0) {
+        mkBtn('📊 Exportar CSV', '#14f0c5', () => { overlay.remove(); exportSensorCSV(); });
+        mkBtn('📋 Exportar JSON', '#f0b429', () => { overlay.remove(); exportJSON(); });
+    }
+
+    if (navigator.share && count > 0) {
+        mkBtn('🔗 Compartir', '#0ea5e9', () => {
+            const exportData = prepareExportData(sensor);
+            const file = new File([JSON.stringify(exportData, null, 2)], 'physys_' + sensor + '.json', { type: 'application/json' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
+            }
+            overlay.remove();
+        });
+    }
+
+    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
+
+    if (count === 0) {
+        const warn = document.createElement('p');
+        warn.style.cssText = 'font-size:12px;color:#f0b429;text-align:center;margin-bottom:12px';
+        warn.textContent = '⚠️ Graba datos primero con el botón Medir para exportar CSV/JSON.';
+        modal.insertBefore(warn, modal.querySelector('.btn-action'));
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'btn-action';
+    closeBtn.style.cssText = 'width:100%;padding:10px;margin-top:4px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px';
+    closeBtn.onclick = () => overlay.remove();
+    modal.appendChild(closeBtn);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+}
+
+function fetchConfig() {
+    fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+            if (data.config) {
+                if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
+                if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
+                if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
+                if (data.config.invert_encoder !== undefined && $('invert-encoder-check')) $('invert-encoder-check').checked = data.config.invert_encoder;
+                
+                // HX711 Filter Sync
+                if (data.config.hx_filter !== undefined) {
+                    if ($('hx-filter-check')) $('hx-filter-check').checked = data.config.hx_filter;
+                    if ($('config-hx-filter-check')) $('config-hx-filter-check').checked = data.config.hx_filter;
+                }
+
+                if (data.config.hx_high_stab !== undefined && $('config-hx-stability-check')) {
+                    $('config-hx-stability-check').checked = data.config.hx_high_stab;
+                }
+                if (data.config.tube_length !== undefined) {
+                    if ($('tube_length')) $('tube_length').value = data.config.tube_length;
+                    if ($('auto-stop-dist')) $('auto-stop-dist').value = data.config.tube_length;
+                }
+                if (data.config.tof_range !== undefined && $('tof_range')) {
+                    $('tof_range').value = data.config.tof_range;
+                }
+                updateToFUI();
+            }
+            const sensors = data.sensors || {};
+            updateUsbUI(sensors.usb, sensors.usb ? 'Pendrive Conectado' : 'No detectado');
+        });
+}
+
+function updateUsbUI(connected, label) {
+    const box = $('usb-status-box');
+    if (!box) return; // Prevent error if USB UI is hidden
+    const dot = box.querySelector('.status-dot');
+    const lbl = $('usb-label');
+    if (connected) {
+        dot.className = 'status-dot connected';
+        lbl.textContent = label || 'Pendrive conectado';
+    } else {
+        dot.className = 'status-dot disconnected';
+        lbl.textContent = 'Pendrive no detectado';
+    }
+}
+
+function saveTofConfig() {
+    const model = $('tof_model').value;
+    const rate = $('sample_rate').value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_TOF:' + model);
+        ws.send('SET_RATE:' + rate); // Save both when applying
+        alert('Configuración guardada (ToF y Frecuencia). El ESP32 se reiniciará para aplicar los cambios.');
+        setTimeout(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send('REBOOT');
+        }, 800);
+    }
+}
+
+function saveSampleRate() {
+    const rate = $('sample_rate').value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_RATE:' + rate);
+        alert('Frecuencia de muestreo actualizada a ' + (1000/rate) + ' Hz');
+    }
+}
+
+function toggleHxFilter() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TOGGLE_HX_FILTER');
+    }
+}
+
+function toggleHxStability() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('TOGGLE_HX_STABILITY');
+    }
+}
+
+// Removed misplaced code block
+
+function toggleUsbAutoLog() {
+    const active = $('usb-auto-log').checked;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_USB_LOG:' + (active ? 'ON' : 'OFF'));
+    }
+}
+
+function resetEncoder() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('RESET_ENC');
+        chartData = [];
+        drawChart();
+    }
+}
+
+function exportToUSB() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('EXPORT_USB');
+        alert('Iniciando exportación a USB. El LED parpadeará en verde al terminar.');
+    } else {
+        alert('Error: No hay conexión con el dispositivo');
+    }
+}
+
+function rebootESP() {
+    if (confirm('¿Estás seguro de que quieres reiniciar el ESP32? Se perderá la conexión temporalmente.')) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('REBOOT');
+        }
+    }
+}
+
+// ─── Toma Automática ───
+// (Definición principal en línea ~629)
+
+function setTubeLength() {
+    const len = $('tube_length') ? $('tube_length').value : ($('auto-stop-dist') ? $('auto-stop-dist').value : '0');
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('SET_TUBE:' + len);
+    }
+}
+
+// ─── Python Editor Logic ───
+function updateLineNumbers() {
+    const editor = $('python-editor');
+    const lineNums = $('line-nums');
+    if (!editor || !lineNums) return;
+    const lines = editor.value.split('\n').length;
+    lineNums.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
+    $('editor-info').textContent = new Blob([editor.value]).size + ' bytes';
+}
+
+function loadExampleScript(exampleKey) {
+    const script = PYTHON_EXAMPLES[exampleKey];
+    if (!script) return;
+    $('python-editor').value = script;
+    updateLineNumbers();
+    setEditorStatus('Ejemplo cargado: ' + exampleKey, 'success');
+}
+
+function loadCurrentScript() {
+    setEditorStatus('Cargando desde ESP32...', '');
+    fetch('/api/python')
+        .then(r => {
+            if (!r.ok) throw new Error('No encontrado');
+            return r.text();
+        })
+        .then(text => {
+            $('python-editor').value = text;
+            updateLineNumbers();
+            setEditorStatus('Script cargado desde ESP32', 'success');
+        })
+        .catch(e => {
+            setEditorStatus('Error: ' + e.message, 'error');
+        });
+}
+
+function saveScript() {
+    const code = $('python-editor').value;
+    if (!code.trim()) {
+        setEditorStatus('Error: El script está vacío', 'error');
+        return;
+    }
+    setEditorStatus('Guardando en ESP32...', '');
+    fetch('/api/python', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: code
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                setEditorStatus('✓ Guardado exitóso (' + new Blob([code]).size + ' bytes)', 'success');
+            } else {
+                setEditorStatus('Error al guardar', 'error');
+            }
+        })
+        .catch(e => {
+            setEditorStatus('Error de conexión', 'error');
+        });
+}
+
+function setEditorStatus(msg, cls) {
+    const el = $('editor-status');
+    el.textContent = msg;
+    el.className = 'editor-status' + (cls ? ' ' + cls : '');
+}
+
+// ─── ToF UI Helpers ───
+const TOF_INFO = {
+    'vl53l0x': 'Alcance hasta 2.0m. Resolución 1mm. Zona muerta: <30mm. Ideal para rieles de aire y caída libre.',
+    'vl53l1x': 'Alcance hasta 4.0m. Resolución 1mm. Zona muerta: <40mm. Resistente a luz ambiental intensa.',
+    'vl53l1xv2': 'VL53L1X v2 optimizado. Zona muerta: <40mm. Mejor precisión a larga distancia.',
+    'vl6180': 'Alcance corto (60cm). Muy alta precisión. Zona muerta: <10mm. Ideal para experimentos de mesa pequeños.',
+    'vl53l5x': 'Multizona (8x8). Permite medir múltiples objetos. Zona muerta: <20mm.'
+};
+
+function copyDataToClipboard() {
+    const tabConf = TAB_CONFIG[currentTab];
+    const sensor = tabConf ? tabConf.sensor : null;
+    if (!sensor || !sensorData[sensor] || sensorData[sensor].length === 0) {
+        alert('No hay datos para copiar. Realiza una medición primero.');
+        return;
+    }
+    
+    const exportData = prepareExportData(sensor);
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(jsonStr).then(() => {
+            const btn = $('btn-copy-data');
+            const oldText = btn.textContent;
+            btn.innerHTML = '✅ ¡Copiado!';
+            setTimeout(() => btn.innerHTML = '📋 Copiar Datos', 2000);
+        }).catch(() => {
+            alert('Error al copiar. Usa el menú de Exportar.');
+        });
+    } else {
+        alert('Copia no soportada. Usa el menú de Exportar.');
+    }
+}
+
+function updateToFUI() {
+    const modelEl = $('tof_model');
+    if (!modelEl) return;
+    const model = modelEl.value;
+    const desc = $('tof_model_desc');
+    const rangeContainer = $('tof_range_container');
+    
+    if (desc) desc.textContent = TOF_INFO[model] || 'Modelo estándar I2C.';
+    if (rangeContainer) {
+        rangeContainer.style.display = (model === 'vl53l0x') ? 'block' : 'none';
+    }
+}
+
+// ─── Init ───
+document.addEventListener('DOMContentLoaded', () => {
+    // Sensor dropdown — use 'input' + track mousedown for reselection
+    const sensorSelect = $('sensor-select');
+    if (sensorSelect) {
+        sensorSelect.addEventListener('change', (e) => switchTab(e.target.value));
+        // Allow re-selecting the same sensor (e.g., to return from config)
+        let dropdownOpened = false;
+        sensorSelect.addEventListener('focus', () => { dropdownOpened = true; });
+        sensorSelect.addEventListener('blur', () => {
+            if (dropdownOpened && !['movimiento','rotacion','fuerza'].includes(currentTab)) {
+                // User opened dropdown while in config/gpio — switch to selected sensor
+                switchTab(sensorSelect.value);
+            }
+            dropdownOpened = false;
+        });
+    }
+
+    // Nav icon buttons — toggle behavior (click again = go back)
+    if ($('btn-nav-config')) $('btn-nav-config').addEventListener('click', () => {
+        const isConfig = currentTab === 'config';
+        switchTab(isConfig ? lastSensorTab : 'config');
+        if (!isConfig) setTimeout(updateToFUI, 50); // Garantizar UI actualizada al abrir
+    });
+    if ($('btn-nav-gpio')) $('btn-nav-gpio').addEventListener('click', () => {
+        switchTab(currentTab === 'gpioview' ? lastSensorTab : 'gpioview');
+    });
+
+    // Variable selector
+    $('graph-variable').addEventListener('change', (e) => {
+        selectedVariable = e.target.value;
+        chartData = [];
+    });
+
+    // Action buttons
+    $('btn-record').addEventListener('click', toggleRecording);
+    $('btn-export').addEventListener('click', openExportModal); // Actualizado para usar el modal unificado
+
+    // Python editor events
+    if ($('example-select')) $('example-select').addEventListener('change', (e) => {
+        if (e.target.value) loadExampleScript(e.target.value);
+    });
+    if ($('btn-load-script')) $('btn-load-script').addEventListener('click', loadCurrentScript);
+    if ($('btn-save-script')) $('btn-save-script').addEventListener('click', saveScript);
+    if ($('python-editor')) {
+        $('python-editor').addEventListener('input', updateLineNumbers);
+        $('python-editor').addEventListener('scroll', () => {
+            $('line-nums').scrollTop = $('python-editor').scrollTop;
+        });
+        // Tab support in textarea
+        $('python-editor').addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const ta = e.target;
+                const start = ta.selectionStart;
+                ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(ta.selectionEnd);
+                ta.selectionStart = ta.selectionEnd = start + 4;
+                updateLineNumbers();
+            }
+        });
+    }
+
+    // Config buttons
+    if ($('btn-save-config')) $('btn-save-config').addEventListener('click', saveAllConfig);
+    if ($('usb-auto-log')) $('usb-auto-log').addEventListener('change', toggleUsbAutoLog);
+    if ($('btn-usb-mount')) $('btn-usb-mount').addEventListener('click', () => {
+        fetchConfig();
+        alert('Re-escaneando dispositivos USB...');
+    });
+    if ($('btn-reboot')) $('btn-reboot').addEventListener('click', rebootESP);
+
+    // GPIO Viewer rate change
+    if ($('gv-rate')) $('gv-rate').addEventListener('change', () => {
+        if (gvActive) startGpioPolling();
+    });
+
+    // Init first tab
+    switchTab('movimiento');
+
+    // Connect WebSocket
+    connectWS();
+
+    // Poll system info every 5s
+    fetchSystemInfo();
+    setInterval(fetchSystemInfo, 5000);
+
+    // Load branding from config.json
+    fetch('/api/config')
+        .then(r => r.json())
+        .then(cfg => {
+            const titleEl = document.querySelector('.title-block h1');
+            if (titleEl) {
+                titleEl.innerHTML = (cfg.lab_name || 'Physys Lab') +
+                    ' <span class="v-tag">' + (cfg.version || 'v9.0') + '</span>';
+            }
+            if (cfg.lab_name) {
+                localStorage.setItem('physys_lab_name', cfg.lab_name);
+            }
+            if (cfg.institution) {
+                setStatus(cfg.institution_short || cfg.institution, '#14f0c5');
+                localStorage.setItem('physys_institution', cfg.institution);
+            }
+        })
+        .catch(() => {});
+
+    // Init Firebase Sync module (H5)
+    if (typeof initFirebaseSync === 'function') {
+        initFirebaseSync();
+    }
+
+    // Redraw chart on resize
+    window.addEventListener('resize', drawChart);
+});

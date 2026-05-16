@@ -82,10 +82,12 @@ La carpeta `produccion/` ha sido sincronizada con el estado actual del desarroll
    - **Solución implementada**: Se revirtió la configuración del `platformio.ini` de memoria `qio_opi` nuevamente al estado base `qio_qspi` (commit `52cec5c`). Esto restauró instantáneamente la capacidad del ESP32 de asignar búferes y recolectar telemetría sin interrupciones.
 
 ### Estado frente a `produccion/`
-*(Pendiente de despliegue a producción una vez finalizadas las pruebas de campo y experimentos de Desmos).*
-- `src/main.cpp` (Modificado en desarrollo)
-- `data/www/app.js` (Modificado en desarrollo)
-- `platformio.ini` (Estabilizado en desarrollo)
+**Estado: ✅ TOTALMENTE SINCRONIZADO (2026-05-15 21:28 COT)**
+- `produccion/main.cpp` (Actualizado con endpoints API REST)
+- `produccion/app.js` (Actualizado con lógica serverDownload)
+- `produccion/platformio.ini` (Actualizado a qio_qspi)
+- `produccion/index.html` (Actualizado)
+- `produccion/styles.css` (Actualizado)
 
 ---
 
