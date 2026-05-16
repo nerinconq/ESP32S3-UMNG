@@ -10,6 +10,8 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 ## 🔬 2. Refinamiento de Sensores (Lógica de Medición)
 - [x] **Filtrado de Rangos ToF (C++)**: 
   - Implementado (Filtro Anti-8190: ignora lecturas >8000 y conserva último valor válido. Commit `93d3407`).
+- [x] **Estabilidad de Bus I2C y PSRAM (Hardware)**:
+  - Resuelto fallo masivo de inicialización de sensores. La configuración de memoria en `platformio.ini` se fijó definitivamente en `qio_qspi` en lugar de `qio_opi`, restaurando la correcta reserva de búferes.
 - [ ] **Optimización PSRAM**:
   - Convertir el buffer de `highSpeedBuffer` en un **Buffer Circular** funcional.
 - [x] **Estabilidad del Gatillo**:
@@ -21,18 +23,21 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 
 ## 🌐 4. Interfaz Web (UI/UX)
 - [ ] **Indicador de Buffer**: Mostrar en la web qué porcentaje de la PSRAM se ha utilizado durante la captura.
-- [ ] **Mejora del Exportador CSV**: Asegurar que los saltos de línea sean compatibles con Excel móvil (CRLF).
+- [x] **Mejora del Exportador CSV**: Asegurar que los saltos de línea sean compatibles con Excel móvil (CRLF).
 
 ## ☁️ 5. Cloud & Persistence (H5)
 - [ ] **Sincronización Firebase**: Implementar el botón de "Subida a la Nube" para experimentos guardados en IndexedDB.
 - [ ] **Validación Offline**: Verificar que el sistema funcione 100% sin internet antes de intentar sincronizar.
 
-## 📊 6. Exportación y Compatibilidad con Desmos
-- [x] **Botón "Copiar para Desmos" (TSV)**: Agregar al modal de exportación un botón que copie datos como columnas separadas por tabulación, compatible con Desmos, Excel y Google Sheets.
-- [x] **Enlace Directo a Desmos (API)**: Generar un botón "Abrir en Desmos" que lance la calculadora con datos precargados (requiere internet).
+## 📊 6. Exportación Móvil y Desmos (Portal Cautivo)
+- [x] **Bypass de Bloqueo Android (Portal Cautivo)**: 
+  - Android bloquea descargas generadas en frontend (`blob:` URLs) al estar sin internet.
+  - Se implementó ruta `POST /api/temp-export` en ESP32 para alojar datos en RAM temporalmente y servirlos forzando descarga nativa HTTP (`Content-Disposition`).
+- [x] **Formatos Oficiales de Exportación**:
+  - Soporte de `.desmos` (JSON validado para abrir en PC/App) y `.csv` compatible con Excel y Sheets.
 - Propuesta visual detallada: `Planes_AI/PROPUESTA_INTEGRACION_DESMOS.html`
 
 ---
 
 > [!TIP]
-> **Paso 1 Finalizado**: El repositorio está impecable. ¿Quieres que hagamos el commit inicial o pasamos directamente al **Paso 2: Filtrado de Sensores** para pulir el firmware?
+> **Progreso v9.2 completado**: El bypass de portal cautivo y la estabilización de memoria QSPI han sido integrados con éxito y sincronizados con `produccion/`.
