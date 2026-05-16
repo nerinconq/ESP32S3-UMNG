@@ -1418,6 +1418,153 @@ function openExportModal() {
 
     mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
 
+    // ─── Sección Desmos & Hojas de Cálculo ───
+    if (count > 0) {
+        const desmosSep = document.createElement('div');
+        desmosSep.style.cssText = 'text-align:center;color:#64748b;font-size:11px;margin:14px 0 8px;border-top:1px solid #334155;padding-top:10px;letter-spacing:0.5px;text-transform:uppercase';
+        desmosSep.textContent = '📊 Desmos & Hojas de Cálculo';
+        modal.appendChild(desmosSep);
+
+        // ── Helper: formatear número sin ceros ──
+        function fmtNum(val, decimals) {
+            if (val === undefined || val === null) return '0';
+            return parseFloat(Number(val).toFixed(decimals)).toString();
+        }
+        function fmtTime(t) { return fmtNum(convertTime(t), timeUnit === 'ms' ? 0 : 2); }
+        function fmtVar(val, key) {
+            if (key === 'dist' || key === 'angleDeg' || key === 'angleRad' || key === 'mass' || key === 'weight' || key === 'weightN') return fmtNum(val, 1);
+            return fmtNum(val, 3);
+        }
+
+        // ── Helper: descargar vía servidor ESP32 (funciona en portal cautivo) ──
+        function serverDownload(content, fileName, mimeType) {
+            return fetch('/api/temp-export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-Filename': fileName,
+                    'X-Mime': mimeType
+                },
+                body: content
+            }).then(r => r.json()).then(j => {
+                if (j.ok) {
+                    // Abrir la URL real del ESP32 para descargar
+                    window.open('/api/temp-export', '_blank');
+                    return true;
+                }
+                throw new Error('Servidor no pudo guardar');
+            });
+        }
+
+        // ── Helper: construir CSV limpio ──
+        function buildCSV() {
+            const vars = tabConf.variables;
+            const hdr = 't(' + timeUnitLabel() + '),' + vars.map(v => v.label).join(',');
+            const rows = data.slice(0, 1000).map(d => {
+                let cols = [fmtTime(d.t)];
+                vars.forEach(v => cols.push(fmtVar(d[v.key], v.key)));
+                return cols.join(',');
+            }).join('\n');
+            return hdr + '\n' + rows;
+        }
+
+        // ── Helper: generar estado .desmos ──
+        function buildDesmosFile() {
+            const vars = tabConf.variables;
+            const slice = data.slice(0, 500);
+            const columns = [{
+                values: slice.map(d => fmtTime(d.t)),
+                id: 'col_t', latex: 'x_{1}', hidden: false
+            }];
+            vars.forEach((v, i) => {
+                columns.push({
+                    values: slice.map(d => fmtVar(d[v.key], v.key)),
+                    id: 'col_' + i,
+                    latex: 'y_{' + (i + 1) + '}',
+                    color: ['#2d70b3', '#c74440', '#388c46', '#6042a6'][i % 4],
+                    hidden: false, points: true, lines: true
+                });
+            });
+            const tV = slice.map(d => convertTime(d.t));
+            const yV = slice.map(d => d[vars[0].key] || 0);
+            const xPad = (Math.max(...tV) - Math.min(...tV)) * 0.1 || 1;
+            const yPad = (Math.max(...yV) - Math.min(...yV)) * 0.1 || 1;
+            return JSON.stringify({
+                version: 11, randomSeed: 'physys',
+                graph: {
+                    viewport: { xmin: Math.min(...tV) - xPad, xmax: Math.max(...tV) + xPad, ymin: Math.min(...yV) - yPad, ymax: Math.max(...yV) + yPad },
+                    xAxisLabel: 't (' + timeUnitLabel() + ')',
+                    yAxisLabel: vars[0].label + ' (' + vars[0].unit + ')'
+                },
+                expressions: { list: [{ type: 'table', columns: columns, id: 'physys_table' }] }
+            });
+        }
+
+        // ── Helper: mostrar feedback ──
+        function showDesmosMsg(html, color) {
+            modal.querySelectorAll('.desmos-msg').forEach(el => el.remove());
+            const msg = document.createElement('div');
+            msg.className = 'desmos-msg';
+            msg.style.cssText = 'color:' + color + ';font-size:12px;text-align:center;margin:8px 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:8px;line-height:1.6';
+            msg.innerHTML = html;
+            const closeBtn = modal.querySelector('[style*="border: 1px solid #ef4444"]');
+            modal.insertBefore(msg, closeBtn || modal.lastChild);
+        }
+
+        // ━━━ BOTÓN 1: Descargar para Desmos ━━━
+        mkBtn('📊 Descargar para Desmos', 'linear-gradient(135deg,#059669,#10b981)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const fname = 'physys_' + sn + '.desmos';
+            showDesmosMsg('⏳ Preparando archivo...', '#94a3b8');
+            serverDownload(buildDesmosFile(), fname, 'application/octet-stream')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>' + fname + '</b> descargado<br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Abre <b>desmos.com/calculator</b><br>' +
+                        '3. Menú <b>≡</b> → <b>Abrir</b> → busca el archivo</small>',
+                        '#6ee7b7'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar descarga. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ BOTÓN 2: Descargar CSV (Sheets/Excel) ━━━
+        mkBtn('📄 Descargar CSV (Sheets/Excel)', 'linear-gradient(135deg,#2563eb,#3b82f6)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const date = new Date().toISOString().slice(0,10);
+            const fname = 'physys_' + sn + '_' + date + '.csv';
+            showDesmosMsg('⏳ Preparando CSV...', '#94a3b8');
+            serverDownload(buildCSV(), fname, 'text/csv')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>CSV descargado</b> (' + count + ' filas)<br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Abre con <b>Google Sheets</b> o <b>Excel</b></small>',
+                        '#93c5fd'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar CSV. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ Instrucciones visuales ━━━
+        const instrDiv = document.createElement('div');
+        instrDiv.style.cssText = 'margin:10px 0 0;padding:10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;font-size:11px;color:#94a3b8;line-height:1.5;text-align:left';
+        instrDiv.innerHTML =
+            '<div style="color:#fbbf24;font-weight:700;margin-bottom:4px;text-align:center">⚡ Flujo rápido</div>' +
+            '① Toca <b>Descargar</b> arriba<br>' +
+            '② <b>Desconéctate</b> del WiFi Physys-Lab<br>' +
+            '③ Abre <b>Desmos</b> o <b>Google Sheets</b><br>' +
+            '④ <b>Importa</b> el archivo descargado';
+        modal.appendChild(instrDiv);
+    }
+
     if (count === 0) {
         const warn = document.createElement('p');
         warn.style.cssText = 'font-size:12px;color:#f0b429;text-align:center;margin-bottom:12px';
@@ -1435,6 +1582,178 @@ function openExportModal() {
     overlay.appendChild(modal);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
+}
+
+// ─── Desmos List Modal (x₁ y y₁ separados para copiar uno a uno) ───
+function showDesmosListModal(lists) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;justify-content:center;align-items:center;z-index:10000;backdrop-filter:blur(6px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:20px;border-radius:16px;width:92%;max-width:500px;max-height:90vh;color:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;overflow-y:auto';
+
+    const title = document.createElement('h3');
+    title.innerHTML = '📊 Listas para Desmos';
+    title.style.cssText = 'margin:0 0 8px 0;color:#10b981;font-size:16px';
+    modal.appendChild(title);
+
+    const steps = document.createElement('div');
+    steps.style.cssText = 'font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.6;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px';
+    steps.innerHTML =
+        '<b style="color:#f0b429">Pasos en Desmos:</b><br>' +
+        '1️⃣ Copia x₁ → pega en <b>línea vacía</b> (no en tabla)<br>' +
+        '2️⃣ Vuelve aquí, copia y₁ → pega en la <b>siguiente línea</b><br>' +
+        '3️⃣ En una nueva línea escribe: <b style="color:#6ee7b7">(x₁, y₁)</b>';
+    modal.appendChild(steps);
+
+    // Función para crear bloque de lista
+    function makeListBlock(label, value, color) {
+        const block = document.createElement('div');
+        block.style.cssText = 'margin-bottom:10px';
+
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:11px;color:' + color + ';font-weight:700;margin-bottom:4px';
+        lbl.textContent = label + ' (' + value.split(',').length + ' valores)';
+        block.appendChild(lbl);
+
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.readOnly = true;
+        area.style.cssText = 'width:100%;height:60px;background:#0f172a;color:#e2e8f0;border:1px solid ' + color + ';border-radius:8px;padding:8px;font-size:10px;font-family:monospace;resize:none;line-height:1.3';
+        block.appendChild(area);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:6px;margin-top:4px';
+
+        const btnSel = document.createElement('button');
+        btnSel.innerHTML = '🔵 Seleccionar';
+        btnSel.style.cssText = 'flex:1;padding:8px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer';
+        btnSel.onclick = () => {
+            area.focus(); area.select();
+            area.setSelectionRange(0, value.length);
+            btnSel.innerHTML = '✅ ¡Seleccionado! Mantén pulsado → Copiar';
+            btnSel.style.background = '#059669';
+            setTimeout(() => { btnSel.innerHTML = '🔵 Seleccionar'; btnSel.style.background = 'linear-gradient(135deg,#2563eb,#3b82f6)'; }, 4000);
+        };
+        btnRow.appendChild(btnSel);
+        block.appendChild(btnRow);
+
+        return block;
+    }
+
+    modal.appendChild(makeListBlock('x₁ (tiempo en ' + timeUnitLabel() + ')', lists.x, '#3b82f6'));
+    modal.appendChild(makeListBlock('y₁ (' + lists.label + ' en ' + lists.unit + ')', lists.y, '#10b981'));
+
+    // Info
+    const info = document.createElement('p');
+    info.style.cssText = 'font-size:11px;color:#64748b;text-align:center;margin:4px 0';
+    info.textContent = lists.count + ' puntos • Luego escribe (x₁, y₁) en Desmos para graficar';
+    modal.appendChild(info);
+
+    // Cerrar
+    const btnClose = document.createElement('button');
+    btnClose.textContent = 'Cerrar';
+    btnClose.style.cssText = 'width:100%;padding:10px;margin-top:8px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px;font-size:13px;cursor:pointer';
+    btnClose.onclick = () => overlay.remove();
+    modal.appendChild(btnClose);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+}
+
+// ─── Manual Copy Modal (Fallback para móvil cuando Clipboard API falla) ───
+function showManualCopyModal(tsvText) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;justify-content:center;align-items:center;z-index:10000;backdrop-filter:blur(6px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:20px;border-radius:16px;width:92%;max-width:500px;max-height:85vh;color:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;overflow:hidden';
+
+    // Título
+    const title = document.createElement('h3');
+    title.innerHTML = '📝 Copiar datos manualmente';
+    title.style.cssText = 'margin:0 0 4px 0;color:#14f0c5;font-size:16px';
+    modal.appendChild(title);
+
+    // Instrucciones
+    const steps = document.createElement('div');
+    steps.style.cssText = 'font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.6';
+    steps.innerHTML = 
+        '<b style="color:#f0b429">Instrucciones para celular:</b><br>' +
+        '1️⃣ Toca <b>"Seleccionar Todo"</b> abajo<br>' +
+        '2️⃣ Mantén pulsado el texto → <b>Copiar</b><br>' +
+        '3️⃣ Abre la app <b>Desmos</b><br>' +
+        '4️⃣ Toca <b>+</b> → <b>Tabla</b> → pega en la primera celda';
+    modal.appendChild(steps);
+
+    // Textarea con datos
+    const area = document.createElement('textarea');
+    area.value = tsvText;
+    area.readOnly = true;
+    area.style.cssText = 'width:100%;flex:1;min-height:150px;max-height:40vh;background:#0f172a;color:#e2e8f0;border:2px solid #3b82f6;border-radius:10px;padding:12px;font-size:11px;font-family:monospace;resize:none;line-height:1.4';
+    modal.appendChild(area);
+
+    // Info de filas
+    const info = document.createElement('p');
+    const lines = tsvText.split('\n').length - 1;
+    info.style.cssText = 'font-size:11px;color:#64748b;margin:6px 0;text-align:center';
+    info.textContent = lines + ' filas de datos • ' + (new Blob([tsvText]).size / 1024).toFixed(1) + ' KB';
+    modal.appendChild(info);
+
+    // Botones
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+    const btnSelect = document.createElement('button');
+    btnSelect.innerHTML = '🔵 Seleccionar Todo';
+    btnSelect.className = 'btn-action';
+    btnSelect.style.cssText = 'flex:1;padding:12px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer';
+    btnSelect.onclick = () => {
+        area.focus();
+        area.select();
+        area.setSelectionRange(0, tsvText.length);
+        btnSelect.innerHTML = '✅ ¡Seleccionado! — Mantén pulsado → Copiar';
+        btnSelect.style.background = 'linear-gradient(135deg,#059669,#10b981)';
+        setTimeout(() => {
+            btnSelect.innerHTML = '🔵 Seleccionar Todo';
+            btnSelect.style.background = 'linear-gradient(135deg,#2563eb,#3b82f6)';
+        }, 4000);
+    };
+
+    const btnClose = document.createElement('button');
+    btnClose.textContent = '✕';
+    btnClose.className = 'btn-action';
+    btnClose.style.cssText = 'width:48px;padding:12px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px;font-size:16px;cursor:pointer';
+    btnClose.onclick = () => overlay.remove();
+
+    btnRow.appendChild(btnSelect);
+    btnRow.appendChild(btnClose);
+    modal.appendChild(btnRow);
+
+    // Botón compartir como alternativa (si está disponible)
+    if (navigator.share) {
+        const btnShare = document.createElement('button');
+        btnShare.innerHTML = '📤 O comparte como archivo TSV';
+        btnShare.className = 'btn-action';
+        btnShare.style.cssText = 'width:100%;padding:10px;margin-top:6px;background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);border-radius:10px;font-size:12px;cursor:pointer';
+        btnShare.onclick = () => {
+            const file = new File([tsvText], 'physys_datos.tsv', { type: 'text/tab-separated-values' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
+            } else {
+                navigator.share({ title: 'Physys Lab', text: tsvText }).catch(() => {});
+            }
+        };
+        modal.appendChild(btnShare);
+    }
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+
+    // Auto-seleccionar el texto
+    setTimeout(() => { area.focus(); area.select(); }, 100);
 }
 
 function fetchConfig() {

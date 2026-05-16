@@ -905,6 +905,41 @@ void setupAPI() {
     serializeJson(doc, json);
     req->send(200, "application/json", json);
   });
+
+  // ── Endpoint de exportación temporal (para descarga en portal cautivo) ──
+  // El cliente POST envía el contenido del archivo, el GET lo sirve como descarga
+  static String tempExportData;
+  static String tempExportName;
+  static String tempExportMime;
+
+  server.on("/api/temp-export", HTTP_POST, [](AsyncWebServerRequest *req) {},
+    NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        tempExportData = "";
+        tempExportData.reserve(total + 1);
+        tempExportName = req->hasHeader("X-Filename") ? req->header("X-Filename") : "export.csv";
+        tempExportMime = req->hasHeader("X-Mime") ? req->header("X-Mime") : "text/csv";
+      }
+      for (size_t i = 0; i < len; i++) {
+        tempExportData += (char)data[i];
+      }
+      if (index + len == total) {
+        Serial.printf("[EXPORT] Archivo temporal listo: %s (%d bytes)\n", tempExportName.c_str(), total);
+        req->send(200, "application/json", "{\"ok\":true,\"size\":" + String(total) + "}");
+      }
+  });
+
+  server.on("/api/temp-export", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (tempExportData.length() == 0) {
+      req->send(404, "text/plain", "No hay datos. Exporta primero.");
+      return;
+    }
+    AsyncWebServerResponse *resp = req->beginResponse(200, tempExportMime, tempExportData);
+    resp->addHeader("Content-Disposition", "attachment; filename=\"" + tempExportName + "\"");
+    resp->addHeader("Access-Control-Allow-Origin", "*");
+    req->send(resp);
+    Serial.printf("[EXPORT] Descarga servida: %s\n", tempExportName.c_str());
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1071,7 +1106,9 @@ void setup() {
     Serial.println("[mDNS] Respondiendo en http://physyslab.local");
   }
 
-  // Portal Cautivo — DNS wildcard
+  // Portal Cautivo — DNS wildcard (obligatorio para detección de portal cautivo)
+  // NOTA: Esto redirige TODOS los dominios a esta IP.
+  // Para acceder a sitios externos (Desmos), desconectar WiFi o usar datos móviles.
   dnsServer.start(53, "*", WiFi.softAPIP());
   Serial.println("[DNS] Portal cautivo activo");
 

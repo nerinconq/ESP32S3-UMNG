@@ -28,8 +28,8 @@ Este documento sirve como hoja de ruta para alcanzar la estabilidad total antes 
 - [ ] **Validación Offline**: Verificar que el sistema funcione 100% sin internet antes de intentar sincronizar.
 
 ## 📊 6. Exportación y Compatibilidad con Desmos
-- [ ] **Botón "Copiar para Desmos" (TSV)**: Agregar al modal de exportación un botón que copie datos como columnas separadas por tabulación, compatible con Desmos, Excel y Google Sheets.
-- [ ] **Enlace Directo a Desmos (API)**: Generar un botón "Abrir en Desmos" que lance la calculadora con datos precargados (requiere internet).
+- [x] **Botón "Copiar para Desmos" (TSV)**: Agregar al modal de exportación un botón que copie datos como columnas separadas por tabulación, compatible con Desmos, Excel y Google Sheets.
+- [x] **Enlace Directo a Desmos (API)**: Generar un botón "Abrir en Desmos" que lance la calculadora con datos precargados (requiere internet).
 - Propuesta visual detallada: `Planes_AI/PROPUESTA_INTEGRACION_DESMOS.html`
 
 ---
