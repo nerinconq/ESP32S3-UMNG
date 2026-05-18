@@ -414,55 +414,134 @@
             width: 100%;
             max-width: 1000px;
         }
+
+        /* Premium Logo & Project vision styles */
+        .project-logo {
+            max-width: 320px;
+            width: 100%;
+            height: auto;
+            margin: 0 auto 25px auto;
+            display: block;
+            filter: drop-shadow(0 0 15px rgba(0, 242, 254, 0.3));
+            animation: pulse-logo 4s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-logo {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(0, 242, 254, 0.2)); }
+            50% { transform: scale(1.02); filter: drop-shadow(0 0 25px rgba(79, 172, 254, 0.4)); }
+        }
+        
+        .project-desc-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: var(--glass-blur);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        }
+        
+        .project-desc-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--primary), var(--accent));
+            opacity: 0.8;
+        }
+
+        .highlight-text {
+            color: var(--text-bold);
+            font-size: 1.15rem;
+            line-height: 1.7;
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        .badge-umng {
+            display: inline-block;
+            background: rgba(0, 242, 254, 0.08);
+            color: var(--primary);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .opt-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
+        }
+
+        .opt-card {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .opt-card:hover {
+            background: rgba(255, 255, 255, 0.02);
+            border-color: rgba(0, 242, 254, 0.2);
+        }
     </style>
 </head>
-<body>
-
-    <header>
+<body>    <header>
         <h1>🔬 Physys Lab — Manual Interactivo</h1>
         <p>Filosofía y Operación Autónoma del Sistema de Medición Portátil</p>
     </header>
-
+ 
     <div class="container">
         <!-- Navigation Tabs -->
         <nav class="tabs">
-            <button class="tab-btn active" id="tab-btn-philosophy" onclick="switchTab('philosophy')">🌲 Filosofía Offline</button>
+            <button class="tab-btn active" id="tab-btn-project" onclick="switchTab('project')">🔬 El Proyecto</button>
             <button class="tab-btn" id="tab-btn-multiuser" onclick="switchTab('multiuser')">🔑 Roles y Accesos</button>
             <button class="tab-btn" id="tab-btn-collision" onclick="switchTab('collision')">📡 Anti-Colisión MAC</button>
+            <button class="tab-btn" id="tab-btn-philosophy" onclick="switchTab('philosophy')">🌲 Filosofía Offline</button>
         </nav>
 
-        <!-- VIEW: Philosophy -->
-        <section class="view-content active" id="view-philosophy">
-            <div class="grid">
-                <div class="card">
-                    <span class="card-icon">⚡</span>
-                    <h3>LittleFS Local Server</h3>
-                    <p>Todo el frontend del sistema reside en los 6MB de almacenamiento flash interno del ESP32-S3. No depende de ningún servidor de internet ni de nubes remotas para desplegar la UI.</p>
+        <!-- VIEW: Project (MAIN VIEW) -->
+        <section class="view-content active" id="view-project">
+            <div class="project-desc-card">
+                <img src="logophysys.png" alt="PhySyS Logo" class="project-logo">
+                <h3 style="text-align: center; margin-bottom: 20px; font-size: 1.6rem; color: var(--primary);">🔬 El Laboratorio en la Palma de tu Mano</h3>
+                <p class="highlight-text">
+                    <strong>PhySyS Lab</strong> (Physics System Measurement for Experimental Physics Laboratory) consiste en un <strong>sistema físico de medición de magnitudes experimentales físicas</strong> diseñado bajo la premisa de ser un <strong>laboratorio portátil en la palma de la mano</strong>.
+                </p>
+                <p class="highlight-text">
+                    La metodología central es el <strong>aprendizaje activo y práctico</strong>: el estudiante aprende <strong>ensamblando/creando sus instrumentos de medida</strong> mediante una placa de hardware <strong>ESP32-S3</strong>, un celular y varios sensores, integrando la teoría física directamente en la experimentación directa.
+                </p>
+                <p class="highlight-text">
+                    Todo esto es posible gracias a una <strong>interfase de código abierto disponible para la sociedad</strong>, concebida como un aporte científico-tecnológico y de apropiación social del conocimiento fruto de los <strong>proyectos de investigación de la Universidad Militar Nueva Granada</strong>.
+                </p>
+                
+                <div class="opt-grid">
+                    <div class="opt-card">
+                        <h4 style="color: var(--primary); margin-bottom: 8px; font-weight: 600;">⚡ Recursos Optimizados</h4>
+                        <p style="font-size: 0.9rem; line-height: 1.5; color: #8b949e;">
+                            Aunque el espacio y los recursos físicos del dispositivo microcontrolador son limitados, todo el sistema ha sido quirúrgicamente optimizado para trabajar con alto rendimiento en entornos de escasos recursos y baja o nula conectividad digital.
+                        </p>
+                    </div>
+                    <div class="opt-card">
+                        <h4 style="color: var(--success); margin-bottom: 8px; font-weight: 600;">🌲 Operación Autónoma</h4>
+                        <p style="font-size: 0.9rem; line-height: 1.5; color: #8b949e;">
+                            Garantiza un funcionamiento Offline-First al 100%, operando de forma autónoma sin depender de nubes, internet ni servidores externos. Ideal para laboratorios rurales o de campo.
+                        </p>
+                    </div>
                 </div>
-                <div class="card">
-                    <span class="card-icon">📊</span>
-                    <h3>HTML5 Canvas Nativo</h3>
-                    <p>Las gráficas cinemáticas y dinámicas se renderizan usando el motor gráfico integrado del navegador del celular, logrando 60fps constantes sin consumir un solo byte de CDNs externos.</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">🌐</span>
-                    <h3>Autónomo PWA (sw.js)</h3>
-                    <p>Gracias al Service Worker autocontenido, toda la interfaz se instala como una app nativa en el móvil. Los estudiantes pueden abrirla y analizar experimentos incluso con el ESP32 apagado.</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">💾</span>
-                    <h3>POST/GET de Escape</h3>
-                    <p>Evadimos las restricciones de los portales cautivos de Android e iOS que bloquean las descargas inalámbricas "sin internet" alojando temporalmente los datos en la RAM y forzando una descarga GET HTTP convencional.</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">🔌</span>
-                    <h3>Host USB OTG Físico</h3>
-                    <p>El puerto USB-C nativo de la tarjeta permite conectar pendrives de forma directa para volcar todos los experimentos históricos a formato .csv sin necesidad de WiFi o de un teléfono celular.</p>
-                </div>
-                <div class="card">
-                    <span class="card-icon">☁️</span>
-                    <h3>Sincronización Diferida</h3>
-                    <p>Si no hay internet, los experimentos se resguardan automáticamente en el localStorage del teléfono. Al volver a la ciudad, la bitácora Firebase sincroniza los datos silenciosamente.</p>
+
+                <div style="text-align: center; margin-top: 25px;">
+                    <span class="badge-umng">🏛️ Aporte de Investigación — UMNG</span>
                 </div>
             </div>
         </section>
@@ -555,10 +634,46 @@
                 </div>
             </div>
         </section>
-    </div>
 
+        <!-- VIEW: Philosophy -->
+        <section class="view-content" id="view-philosophy">
+            <div class="grid">
+                <div class="card">
+                    <span class="card-icon">⚡</span>
+                    <h3>LittleFS Local Server</h3>
+                    <p>Todo el frontend del sistema reside en los 6MB de almacenamiento flash interno del ESP32-S3. No depende de ningún servidor de internet ni de nubes remotas para desplegar la UI.</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">📊</span>
+                    <h3>HTML5 Canvas Nativo</h3>
+                    <p>Las gráficas cinemáticas y dinámicas se renderizan usando el motor gráfico integrado del navegador del celular, logrando 60fps constantes sin consumir un solo byte de CDNs externos.</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">🌐</span>
+                    <h3>Autónomo PWA (sw.js)</h3>
+                    <p>Gracias al Service Worker autocontenido, toda la interfaz se instala como una app nativa en el móvil. Los estudiantes pueden abrirla y analizar experimentos incluso con el ESP32 apagado.</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">💾</span>
+                    <h3>POST/GET de Escape</h3>
+                    <p>Evadimos las restricciones de los portales cautivos de Android e iOS que bloquean las descargas inalámbricas "sin internet" alojando temporalmente los datos en la RAM y forzando una descarga GET HTTP convencional.</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">🔌</span>
+                    <h3>Host USB OTG Físico</h3>
+                    <p>El puerto USB-C nativo de la tarjeta permite conectar pendrives de forma directa para volcar todos los experimentos históricos a formato .csv sin necesidad de WiFi o de un teléfono celular.</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">☁️</span>
+                    <h3>Sincronización Diferida</h3>
+                    <p>Si no hay internet, los experimentos se resguardan automáticamente en el localStorage del teléfono. Al volver a la ciudad, la bitácora Firebase sincroniza los datos silenciosamente.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+ 
     <footer class="footer">
-        <p>Physys Lab — Universidad Militar Nueva Granada | Ingeniería Física</p>
+        <p>Physys Lab — Universidad Militar Nueva Granada | Departamento de Física</p>
         <p style="font-size: 0.75rem; margin-top: 5px; color: #4f5b66;">Desarrollado para entornos rurales y de cero conectividad digital.</p>
     </footer>
 
