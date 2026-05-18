@@ -146,6 +146,14 @@ Description: USB JTAG/serial debug unit
 
 ## Paso 4 — Compilar y Subir el Firmware
 
+> [!IMPORTANT]
+> **Identifica tu Tarjeta ESP32-S3:**
+> El proyecto maneja dos perfiles de hardware definidos en `platformio.ini`:
+> * **Tarjeta Base** (devkit básico, Freenove sin cámara): Entorno `esp32s3base`
+> * **Tarjeta CAM** (con cámara y OPI PSRAM): Entorno `esp32s3cam`
+>
+> Usar el flag `-e <entorno>` acelera la compilación en un 50% y asegura que se cargue la configuración de pines correcta para tu placa.
+
 ### 4.1 Abrir terminal en la carpeta
 
 ```powershell
@@ -154,8 +162,13 @@ cd C:\PhysysLab     # o donde hayas puesto la carpeta produccion
 
 ### 4.2 Primera compilación (descarga de dependencias)
 
+Compila el firmware seleccionando tu placa:
 ```powershell
-pio run
+# Si tu tarjeta es la BASE (Freenove / estándar):
+pio run -e esp32s3base
+
+# Si tu tarjeta es la CAM (con módulo de cámara):
+pio run -e esp32s3cam
 ```
 
 > [!NOTE]
@@ -174,13 +187,18 @@ SUCCESS
 
 ### 4.3 Subir firmware al ESP32-S3
 
+Sube el firmware compilado según tu placa:
 ```powershell
-pio run -t upload
+# Si tu tarjeta es la BASE:
+pio run -e esp32s3base -t upload
+
+# Si tu tarjeta es la CAM:
+pio run -e esp32s3cam -t upload
 ```
 
-Si el puerto no se detecta automáticamente, especifícalo:
+Si el puerto no se detecta automáticamente, puedes forzarlo:
 ```powershell
-pio run -t upload --upload-port COM3
+pio run -e esp32s3base -t upload --upload-port COM3
 ```
 
 > [!IMPORTANT]
@@ -205,17 +223,26 @@ Hard resetting via RTS pin...
 
 ## Paso 5 — Subir el Sistema de Archivos (Interfaz Web)
 
+> [!TIP]
+> **Optimización GZIP integrada (v9.3):**
+> Los archivos de la web (`index.html`, `app.js`, `styles.css`) ya vienen pre-comprimidos en formato `.gz` dentro de `data/www/`. Esto reduce un 80% el tamaño de la subida y evita caídas de memoria (Heap Corruption) en la placa. ¡No los elimines! Si modificas los archivos web manualmente, asegúrate de correr el script `python scratch/gzip_assets.py` para regenerar las versiones `.gz`.
+
+Sube el sistema de archivos seleccionando tu placa:
 ```powershell
-pio run -t uploadfs
+# Si tu tarjeta es la BASE:
+pio run -e esp32s3base -t uploadfs
+
+# Si tu tarjeta es la CAM:
+pio run -e esp32s3cam -t uploadfs
 ```
 
 Si necesitas especificar puerto:
 ```powershell
-pio run -t uploadfs --upload-port COM3
+pio run -e esp32s3base -t uploadfs --upload-port COM3
 ```
 
 > [!IMPORTANT]
-> Este paso sube toda la carpeta `data/` (incluyendo `www/` con la interfaz web) como una imagen **LittleFS** a la partición `storage` del ESP32. **Sin este paso, la interfaz web no funcionará.**
+> Este paso sube toda la carpeta `data/` (incluyendo `www/` con la interfaz web y archivos `.gz`) como una imagen **LittleFS** a la partición `storage` del ESP32. **Sin este paso, la interfaz web no funcionará.**
 
 **Resultado esperado:**
 ```
@@ -307,14 +334,14 @@ pip install platformio
 # 2. Ir a la carpeta produccion
 cd C:\PhysysLab
 
-# 3. Compilar (primera vez descarga todo)
-pio run
+# 3. Compilar (reemplaza 'esp32s3base' por 'esp32s3cam' si usas la placa de cámara)
+pio run -e esp32s3base
 
 # 4. Subir firmware
-pio run -t upload
+pio run -e esp32s3base -t upload
 
 # 5. Subir interfaz web (LittleFS)
-pio run -t uploadfs
+pio run -e esp32s3base -t uploadfs
 
 # 6. Verificar
 pio device monitor
