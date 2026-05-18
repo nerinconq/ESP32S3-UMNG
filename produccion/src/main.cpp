@@ -39,13 +39,13 @@ String bootMode = "normal";
 // PINOUT (Freenove ESP32-S3 WROOM Reference)
 // ═══════════════════════════════════════════════════════════════
 // Bus I2C #0 — ToF VL53L0X (dirección 0x29)
-#define TOF_SDA        4    // GPIO4
-#define TOF_SCL        5    // GPIO5
+int pinTofSda = 4;
+int pinTofScl = 5;
 // Bus I2C #1 — AS5600 Encoder (dirección 0x36)
-#define ENC_SDA        10   // GPIO10
-#define ENC_SCL        11   // GPIO11
-#define HX711_DT       6    // GPIO6 — Celda de carga
-#define HX711_SCK      7    // GPIO7
+int pinEncSda = 10;
+int pinEncScl = 11;
+int pinHxDt = 6;
+int pinHxSck = 7;
 #define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove)
 #define NUM_LEDS       1
 #define FACTORY_RESET_PIN 0 // GPIO0 — BOOT button = Factory Reset (10s hold)
@@ -56,6 +56,10 @@ String bootMode = "normal";
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 DNSServer dnsServer;
+
+// Control Multiusuario
+String currentLeaderIp = "";
+String currentTeacherIp = "";
 
 TwoWire I2C_TOF = TwoWire(0);  // Bus 0 para ToF
 TwoWire I2C_ENC = TwoWire(1);  // Bus 1 para Encoder
@@ -191,11 +195,30 @@ void loadSettings() {
   state.useHxFilter = preferences.getBool("hx_filter", true);
   state.hxHighStability = preferences.getBool("hx_high_stab", false);
   state.tofRange = preferences.getString("tof_range", "short");
+  
+  pinTofSda = preferences.getInt("pin_tof_sda", 4);
+  pinTofScl = preferences.getInt("pin_tof_scl", 5);
+  pinEncSda = preferences.getInt("pin_enc_sda", 10);
+  pinEncScl = preferences.getInt("pin_enc_scl", 11);
+  pinHxDt = preferences.getInt("pin_hx_dt", 6);
+  pinHxSck = preferences.getInt("pin_hx_sck", 7);
   preferences.end();
   
   // Validaciones de seguridad - Forzar 10ms (100Hz) si no es válido o es la primera vez
   if (sampleRateMs < 2 || sampleRateMs > 1000) sampleRateMs = 10;
   if (currentToFModel == "" || currentToFModel.length() < 3) currentToFModel = "vl53l0x";
+
+  // Auto-recuperación de Bootloop: Si NVS tiene el preset de cámara que causa crash, revertir.
+  bool badPreset1 = (pinTofSda == 1 && pinTofScl == 2 && pinEncSda == 3 && pinEncScl == 14 && pinHxDt == 21 && pinHxSck == 26);
+  bool badPreset2 = (pinTofSda == 1 && pinTofScl == 2 && pinEncSda == 8 && pinEncScl == 9 && pinHxDt == 45 && pinHxSck == 46);
+  bool badPreset3 = (pinTofSda == 1 && pinTofScl == 42 && pinEncSda == 14 && pinEncScl == 21 && pinHxDt == 47 && pinHxSck == 45); // Strapping
+  bool badPreset4 = (pinTofSda == 1 && pinTofScl == 2 && pinEncSda == 14 && pinEncScl == 21 && pinHxDt == 41 && pinHxSck == 42); // LED conflicto
+  if (badPreset1 || badPreset2 || badPreset3 || badPreset4) {
+    Serial.println("[SYS] ¡PELIGRO! Detectado preset CAM conflictivo. Revirtiendo pines a básicos para evitar Bootloop...");
+    pinTofSda = 4; pinTofScl = 5;
+    pinEncSda = 10; pinEncScl = 11;
+    pinHxDt = 6; pinHxSck = 7;
+  }
 
   Serial.printf("[NVS] Configuración cargada: ToF=%s, USB_Log=%d, Rate=%d ms (%d Hz)\n", 
                 currentToFModel.c_str(), usbLogActive, sampleRateMs, 1000/sampleRateMs);
@@ -235,6 +258,13 @@ void saveSettings() {
   preferences.putBool("inv_enc", state.invertEncoder);
   preferences.putBool("hx_filter", state.useHxFilter);
   preferences.putBool("hx_high_stab", state.hxHighStability);
+  
+  preferences.putInt("pin_tof_sda", pinTofSda);
+  preferences.putInt("pin_tof_scl", pinTofScl);
+  preferences.putInt("pin_enc_sda", pinEncSda);
+  preferences.putInt("pin_enc_scl", pinEncScl);
+  preferences.putInt("pin_hx_dt", pinHxDt);
+  preferences.putInt("pin_hx_sck", pinHxSck);
   preferences.end();
   Serial.println("[NVS] Guardado exitoso");
 }
@@ -244,7 +274,7 @@ void saveSettings() {
 // ═══════════════════════════════════════════════════════════════
 void initSensors() {
   // Bus I2C #0 — ToF (Varios modelos)
-  I2C_TOF.begin(TOF_SDA, TOF_SCL);
+  I2C_TOF.begin(pinTofSda, pinTofScl);
   I2C_TOF.setClock(400000);
 
   state.tofReady = false;
@@ -317,7 +347,7 @@ void initSensors() {
   }
 
   // AS5600 (Encoder Magnético) en Bus 1
-  I2C_ENC.begin(ENC_SDA, ENC_SCL);
+  I2C_ENC.begin(pinEncSda, pinEncScl);
   I2C_ENC.setClock(400000);
   encoder.begin(255); 
   if (encoder.isConnected()) {
@@ -328,7 +358,7 @@ void initSensors() {
   }
 
   // HX711 (Celda de Carga)
-  loadCell.begin(HX711_DT, HX711_SCK);
+  loadCell.begin(pinHxDt, pinHxSck);
   if (loadCell.is_ready()) {
     loadCell.set_scale(420.0);
     loadCell.tare();
@@ -595,16 +625,22 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     else if (msg == "START_HX")  { state.hxMeasure.active = true; state.measuring = true; resetBuffer(); state.measurementStartTime = millis(); setLED(CRGB::Blue); ws.textAll("{\"command\":\"RESET\"}"); }
     else if (msg == "STOP_HX")   { state.hxMeasure.active = false; checkGlobalStop(); }
     else if (msg == "RESET_ENC") {
+      String clientIp = client->remoteIP().toString();
+      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // PROTEGER
       state.cumulativeAngleDeg = 0;
       Serial.println("[CMD] Encoder puesto a cero");
     }
     else if (msg == "INVERT_ENC") {
+      String clientIp = client->remoteIP().toString();
+      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // PROTEGER
       state.invertEncoder = !state.invertEncoder;
       saveSettings();
       ws.textAll("{\"config\":{\"invert_encoder\":" + String(state.invertEncoder ? "true" : "false") + "}}");
       Serial.printf("[CMD] Inversión de encoder: %d\n", state.invertEncoder);
     }
     else if (msg == "TOGGLE_HX_FILTER") {
+      String clientIp = client->remoteIP().toString();
+      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // PROTEGER
       state.useHxFilter = !state.useHxFilter;
       saveSettings();
       ws.textAll("{\"config\":{\"hx_filter\":" + String(state.useHxFilter ? "true" : "false") + "}}");
@@ -630,12 +666,41 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       Serial.printf("[CMD] Modelo ToF cambiado a: %s (Aplicará tras reinicio)\n", currentToFModel.c_str());
     }
     else if (msg.startsWith("SET_RATE:")) {
+      String clientIp = client->remoteIP().toString();
+      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // PROTEGER
       int newRate = msg.substring(9).toInt();
       if (newRate >= 2 && newRate <= 1000) {
         sampleRateMs = newRate;
         saveSettings();
         Serial.printf("[CMD] Frecuencia de muestreo cambiada a: %d ms\n", sampleRateMs);
         ws.textAll("{\"config\":{\"sample_rate\":" + String(sampleRateMs) + "}}");
+      }
+    }
+    else if (msg.startsWith("SET_PINS:")) {
+      String clientIp = client->remoteIP().toString();
+      if (currentTeacherIp != clientIp) return; // SOLO DOCENTE (Líder NO puede reasignar pines de hardware)
+      
+      String payload = msg.substring(9);
+      // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck
+      int p[6];
+      int lastIndex = 0;
+      for (int i=0; i<6; i++) {
+        int commaIndex = payload.indexOf(',', lastIndex);
+        if (commaIndex == -1 && i == 5) commaIndex = payload.length();
+        if (commaIndex != -1) {
+          p[i] = payload.substring(lastIndex, commaIndex).toInt();
+          lastIndex = commaIndex + 1;
+        } else { p[i] = -1; }
+      }
+      
+      if (p[0] != -1) {
+        pinTofSda = p[0]; pinTofScl = p[1];
+        pinEncSda = p[2]; pinEncScl = p[3];
+        pinHxDt = p[4]; pinHxSck = p[5];
+        saveSettings();
+        Serial.println("[CMD] Pines dinámicos actualizados. Reiniciando...");
+        delay(500);
+        ESP.restart();
       }
     }
     else if (msg == "USB_EXPORT") {
@@ -650,6 +715,34 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     else if (msg == "REBOOT") {
       Serial.println("[CMD] Comando REBOOT recibido");
       safeReboot();
+    }
+    else if (msg.startsWith("AUTH:")) {
+      String pin = msg.substring(5);
+      pin.trim();
+      String clientIp = client->remoteIP().toString();
+      
+      if (pin == "1234") { // Leader
+        if (currentLeaderIp == "" || currentLeaderIp == clientIp) {
+          currentLeaderIp = clientIp;
+          client->text("{\"auth\":\"leader\",\"status\":\"success\"}");
+          Serial.printf("[AUTH] Líder asignado a IP: %s\n", clientIp.c_str());
+        } else {
+          client->text("{\"auth\":\"student\",\"status\":\"busy\",\"ip\":\"" + currentLeaderIp + "\"}");
+        }
+      } else if (pin == "Umng-2026") { // Teacher
+        currentTeacherIp = clientIp;
+        client->text("{\"auth\":\"teacher\",\"status\":\"success\"}");
+        Serial.printf("[AUTH] Docente activo en IP: %s\n", clientIp.c_str());
+      } else {
+        client->text("{\"auth\":\"student\",\"status\":\"fail\"}");
+      }
+    }
+    else if (msg == "DEAUTH") {
+      String clientIp = client->remoteIP().toString();
+      if (currentLeaderIp == clientIp) currentLeaderIp = "";
+      if (currentTeacherIp == clientIp) currentTeacherIp = "";
+      client->text("{\"auth\":\"student\",\"status\":\"success\"}");
+      Serial.printf("[AUTH] Usuario desconectado: %s\n", clientIp.c_str());
     }
   }
 }
@@ -723,6 +816,8 @@ void setupAPI() {
     doc["config"]["hx_high_stab"] = state.hxHighStability;
     doc["config"]["tube_length"] = state.tubeLength;
     doc["config"]["tof_range"] = state.tofRange;
+    doc["auth"]["leader_ip"] = currentLeaderIp;
+    doc["auth"]["teacher_ip"] = currentTeacherIp;
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
@@ -740,14 +835,14 @@ void setupAPI() {
     JsonDocument doc;
     struct PinInfo { int gpio; const char* label; const char* fn; };
     PinInfo allPins[] = {
-      {0,  "BOOT",     "boot"},
-      {4,  "TOF_SDA",  "i2c"},
-      {5,  "TOF_SCL",  "i2c"},
-      {6,  "HX_DT",    "serial"},
-      {7,  "HX_SCK",   "serial"},
-      {10, "ENC_SDA",  "i2c"},
-      {11, "ENC_SCL",  "i2c"},
-      {48, "WS2812",   "led"}
+      {0, "BOOT/0", "boot"}, {1, "1", "gpio"}, {2, "2", "gpio"}, {3, "3", "gpio"}, 
+      {4, "4", "gpio"}, {5, "5", "gpio"}, {6, "6", "gpio"}, {7, "7", "gpio"},
+      {8, "8", "gpio"}, {9, "9", "gpio"}, {10, "10", "gpio"}, {11, "11", "gpio"},
+      {12, "12", "gpio"}, {13, "13", "gpio"}, {14, "14", "gpio"}, {15, "15", "gpio"},
+      {16, "16", "gpio"}, {17, "17", "gpio"}, {18, "18", "gpio"}, {21, "21", "gpio"},
+      {26, "26", "gpio"}, {38, "38", "gpio"}, {39, "39", "gpio"}, {40, "40", "gpio"}, 
+      {41, "41", "gpio"}, {42, "42", "gpio"}, {43, "43", "TX"}, {44, "44", "RX"}, 
+      {45, "45", "gpio"}, {46, "46", "gpio"}, {47, "47", "gpio"}, {48, "48", "led"}
     };
     const int numPins = sizeof(allPins) / sizeof(allPins[0]);
     
@@ -757,6 +852,15 @@ void setupAPI() {
       pin["g"] = allPins[i].gpio;
       pin["l"] = allPins[i].label;
       pin["f"] = allPins[i].fn;
+      
+      // Sobrescribir labels si el pin está asignado dinámicamente
+      if(allPins[i].gpio == pinTofSda) { pin["l"] = "TOF_SDA"; pin["f"] = "i2c"; }
+      else if(allPins[i].gpio == pinTofScl) { pin["l"] = "TOF_SCL"; pin["f"] = "i2c"; }
+      else if(allPins[i].gpio == pinEncSda) { pin["l"] = "ENC_SDA"; pin["f"] = "i2c"; }
+      else if(allPins[i].gpio == pinEncScl) { pin["l"] = "ENC_SCL"; pin["f"] = "i2c"; }
+      else if(allPins[i].gpio == pinHxDt) { pin["l"] = "HX_DT"; pin["f"] = "serial"; }
+      else if(allPins[i].gpio == pinHxSck) { pin["l"] = "HX_SCK"; pin["f"] = "serial"; }
+      
       pin["v"] = digitalRead(allPins[i].gpio);
     }
     doc["heap"] = ESP.getFreeHeap();
@@ -904,6 +1008,41 @@ void setupAPI() {
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
+  });
+
+  // ── Endpoint de exportación temporal (para descarga en portal cautivo) ──
+  // El cliente POST envía el contenido del archivo, el GET lo sirve como descarga
+  static String tempExportData;
+  static String tempExportName;
+  static String tempExportMime;
+
+  server.on("/api/temp-export", HTTP_POST, [](AsyncWebServerRequest *req) {},
+    NULL, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+      if (index == 0) {
+        tempExportData = "";
+        tempExportData.reserve(total + 1);
+        tempExportName = req->hasHeader("X-Filename") ? req->header("X-Filename") : "export.csv";
+        tempExportMime = req->hasHeader("X-Mime") ? req->header("X-Mime") : "text/csv";
+      }
+      for (size_t i = 0; i < len; i++) {
+        tempExportData += (char)data[i];
+      }
+      if (index + len == total) {
+        Serial.printf("[EXPORT] Archivo temporal listo: %s (%d bytes)\n", tempExportName.c_str(), total);
+        req->send(200, "application/json", "{\"ok\":true,\"size\":" + String(total) + "}");
+      }
+  });
+
+  server.on("/api/temp-export", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (tempExportData.length() == 0) {
+      req->send(404, "text/plain", "No hay datos. Exporta primero.");
+      return;
+    }
+    AsyncWebServerResponse *resp = req->beginResponse(200, tempExportMime, tempExportData);
+    resp->addHeader("Content-Disposition", "attachment; filename=\"" + tempExportName + "\"");
+    resp->addHeader("Access-Control-Allow-Origin", "*");
+    req->send(resp);
+    Serial.printf("[EXPORT] Descarga servida: %s\n", tempExportName.c_str());
   });
 }
 
@@ -1071,7 +1210,9 @@ void setup() {
     Serial.println("[mDNS] Respondiendo en http://physyslab.local");
   }
 
-  // Portal Cautivo — DNS wildcard
+  // Portal Cautivo — DNS wildcard (obligatorio para detección de portal cautivo)
+  // NOTA: Esto redirige TODOS los dominios a esta IP.
+  // Para acceder a sitios externos (Desmos), desconectar WiFi o usar datos móviles.
   dnsServer.start(53, "*", WiFi.softAPIP());
   Serial.println("[DNS] Portal cautivo activo");
 

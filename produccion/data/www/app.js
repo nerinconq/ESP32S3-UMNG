@@ -79,6 +79,13 @@ let lastData = {};
 let currentChartStartTime = null;
 let lastDrawTime = 0; // Para throttling de dibujo
 
+// --- MULTI-USER ROLES & HARDWARE PROFILE VARIABLES ---
+let currentUserRole = sessionStorage.getItem('user_role') || "student";
+let isLeaderActive = false;
+let leaderIp = "";
+let selectedAuthRole = "student";
+let activeHardwareProfile = { camera_detected: false, type: "standard_base", pins: {} };
+
 // ─── DOM Elements ───
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -105,6 +112,7 @@ function connectWS() {
     ws.onopen = () => {
         setStatus('Conectado', '#14f0c5');
         updateSensorBadges({ tof: true, encoder: true, loadcell: true });
+        syncRoleUI();
     };
 
     ws.onclose = () => {
@@ -119,6 +127,77 @@ function connectWS() {
     ws.onmessage = (evt) => {
         try {
             const data = JSON.parse(evt.data);
+            
+            // --- NUEVOS CONTROLADORES DE ROL Y HARDWARE ---
+            if (data.auth) {
+                if (data.auth === "leader" && data.status === "success") {
+                    currentUserRole = "leader";
+                    sessionStorage.setItem('user_role', 'leader');
+                    showNotification("⭐ Autenticado como Líder de Mesa", "#eab308");
+                    closeAuthModal();
+                    syncRoleUI();
+                } else if (data.auth === "teacher" && data.status === "success") {
+                    currentUserRole = "teacher";
+                    sessionStorage.setItem('user_role', 'teacher');
+                    showNotification("🎓 Autenticado como Docente (Admin)", "#38bdf8");
+                    closeAuthModal();
+                    syncRoleUI();
+                } else if (data.auth === "student" && data.status === "busy") {
+                    showNotification("⚠️ ¡La mesa ya tiene un líder activo desde IP: " + data.ip + "!", "#ff4d6a");
+                } else if (data.auth === "student" && data.status === "fail") {
+                    showNotification("❌ PIN o Contraseña incorrecta", "#ff4d6a");
+                } else if (data.auth === "student") {
+                    currentUserRole = "student";
+                    sessionStorage.setItem('user_role', 'student');
+                    showNotification("🔒 Sesión cerrada. Rol de Estudiante activo.", "#94a3b8");
+                    syncRoleUI();
+                }
+                return;
+            }
+            
+            if (data.status) {
+                if (data.status === "leader_active") {
+                    isLeaderActive = true;
+                    leaderIp = data.ip;
+                    updateLeaderStatusBanner();
+                    showNotification("⭐ Líder de Mesa activo (IP: " + data.ip + ")", "#eab308");
+                } else if (data.status === "leader_deauthorized" || data.status === "leader_disconnected" || data.status === "leader_timeout") {
+                    isLeaderActive = false;
+                    leaderIp = "";
+                    if (currentUserRole === "leader") {
+                        currentUserRole = "student";
+                        sessionStorage.setItem('user_role', 'student');
+                        syncRoleUI();
+                    }
+                    updateLeaderStatusBanner();
+                    if (data.status === "leader_timeout") {
+                        showNotification("🔒 Control liberado por inactividad del Líder", "#ff4d6a");
+                    } else {
+                        showNotification("🔓 Control de mesa liberado", "#14f0c5");
+                    }
+                } else if (data.status === "teacher_timeout" || data.status === "teacher_disconnected") {
+                    if (currentUserRole === "teacher") {
+                        currentUserRole = "student";
+                        sessionStorage.setItem('user_role', 'student');
+                        syncRoleUI();
+                        showNotification("🔒 Sesión de Docente cerrada por inactividad o desconexión", "#ff4d6a");
+                    }
+                } else if (data.status === "pins_updated") {
+                    showNotification("🔌 Pines de hardware actualizados correctamente. Reiniciando tarjeta...", "#38bdf8");
+                    return;
+                }
+            }
+
+            if (data.hardware) {
+                activeHardwareProfile = data.hardware;
+                updateHardwareStatusBanner();
+                populatePinSelectors();
+            }
+            
+            if (data.error === "unauthorized") {
+                showNotification("⚠️ Acción rechazada: La mesa está controlada por el Líder activo en IP " + data.leader_ip, "#ff4d6a");
+                return;
+            }
             
             if (data.command === 'START' || data.command === 'RESET') {
                 currentChartStartTime = null;
@@ -1071,10 +1150,20 @@ function fetchSystemInfo() {
             if (data.config) {
                 if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
                 if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
-                if (data.config.usb_log !== undefined) $('usb-auto-log').checked = data.config.usb_log;
+                if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
             }
             if (data.sensors) {
                 updateSensorBadges(data.sensors);
+            }
+            if (data.hardware) {
+                activeHardwareProfile = data.hardware;
+                updateHardwareStatusBanner();
+                populatePinSelectors();
+            }
+            if (data.auth) {
+                isLeaderActive = data.auth.leader_active;
+                leaderIp = data.auth.leader_ip || "";
+                updateLeaderStatusBanner();
             }
         })
         .catch(() => {});
@@ -1197,17 +1286,32 @@ x_natural = 0.15    # Longitud natural (metros)
 let gvInterval = null;
 let gvActive = false;
 
+// ESP32-S3 WROOM-1 physical top-to-bottom layout mapping
+const leftOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14];
+const rightOrder = [21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2, 1, 26];
+
 function renderGpioPins(pins) {
     const leftCol = $('gv-left-pins');
     const rightCol = $('gv-right-pins');
     if (!leftCol || !rightCol) return;
 
-    // Split: GPIO 0-21 = left, 35-48 = right
-    const leftPins = pins.filter(p => p.g <= 21);
-    const rightPins = pins.filter(p => p.g >= 35);
+    // Filter and sort left pins
+    const leftPins = pins.filter(p => leftOrder.includes(p.g));
+    leftPins.sort((a, b) => leftOrder.indexOf(a.g) - leftOrder.indexOf(b.g));
+
+    // Filter and sort right pins (anything not in left row goes to right column)
+    const rightPins = pins.filter(p => !leftOrder.includes(p.g));
+    rightPins.sort((a, b) => {
+        const idxA = rightOrder.indexOf(a.g);
+        const idxB = rightOrder.indexOf(b.g);
+        if (idxA === -1 && idxB === -1) return a.g - b.g;
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+    });
 
     leftCol.innerHTML = leftPins.map(p =>
-        `<div class="gv-pin fn-${p.f}">
+        `<div class="gv-pin fn-${p.f}" data-gpio="${p.g}">
             <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
             <span class="gv-pin-num">${p.g}</span>
             <span class="gv-pin-label">${p.l}</span>
@@ -1215,7 +1319,7 @@ function renderGpioPins(pins) {
     ).join('');
 
     rightCol.innerHTML = rightPins.map(p =>
-        `<div class="gv-pin fn-${p.f}">
+        `<div class="gv-pin fn-${p.f}" data-gpio="${p.g}">
             <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
             <span class="gv-pin-num">${p.g}</span>
             <span class="gv-pin-label">${p.l}</span>
@@ -1418,6 +1522,201 @@ function openExportModal() {
 
     mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
 
+    // ─── Sección Desmos & Hojas de Cálculo ───
+    if (count > 0) {
+        const desmosSep = document.createElement('div');
+        desmosSep.style.cssText = 'text-align:center;color:#64748b;font-size:11px;margin:14px 0 8px;border-top:1px solid #334155;padding-top:10px;letter-spacing:0.5px;text-transform:uppercase';
+        desmosSep.textContent = '📊 Desmos & Hojas de Cálculo';
+        modal.appendChild(desmosSep);
+
+        // ── Helper: formatear número sin ceros ──
+        function fmtNum(val, decimals) {
+            if (val === undefined || val === null) return '0';
+            return parseFloat(Number(val).toFixed(decimals)).toString();
+        }
+        function fmtTime(t) { return fmtNum(convertTime(t), timeUnit === 'ms' ? 0 : 2); }
+        function fmtVar(val, key) {
+            if (key === 'dist' || key === 'angleDeg' || key === 'angleRad' || key === 'mass' || key === 'weight' || key === 'weightN') return fmtNum(val, 1);
+            return fmtNum(val, 3);
+        }
+
+        // ── Helper: descargar vía servidor ESP32 (funciona en portal cautivo) ──
+        function serverDownload(content, fileName, mimeType) {
+            return fetch('/api/temp-export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-Filename': fileName,
+                    'X-Mime': mimeType
+                },
+                body: content
+            }).then(r => r.json()).then(j => {
+                if (j.ok) {
+                    // Abrir la URL real del ESP32 para descargar
+                    window.open('/api/temp-export', '_blank');
+                    return true;
+                }
+                throw new Error('Servidor no pudo guardar');
+            });
+        }
+
+        // ── Helper: construir CSV limpio ──
+        function buildCSV() {
+            const vars = tabConf.variables;
+            const hdr = 't(' + timeUnitLabel() + '),' + vars.map(v => v.label).join(',');
+            const rows = data.slice(0, 1000).map(d => {
+                let cols = [fmtTime(d.t)];
+                vars.forEach(v => cols.push(fmtVar(d[v.key], v.key)));
+                return cols.join(',');
+            }).join('\n');
+            return hdr + '\n' + rows;
+        }
+
+        // ── Helper: generar estado .desmos ──
+        function buildDesmosFile() {
+            const vars = tabConf.variables;
+            const slice = data.slice(0, 500);
+            const columns = [{
+                values: slice.map(d => fmtTime(d.t)),
+                id: 'col_t', latex: 'x_{1}', hidden: false
+            }];
+            vars.forEach((v, i) => {
+                columns.push({
+                    values: slice.map(d => fmtVar(d[v.key], v.key)),
+                    id: 'col_' + i,
+                    latex: 'y_{' + (i + 1) + '}',
+                    color: ['#2d70b3', '#c74440', '#388c46', '#6042a6'][i % 4],
+                    hidden: false, points: true, lines: true
+                });
+            });
+            const tV = slice.map(d => convertTime(d.t));
+            const yV = slice.map(d => d[vars[0].key] || 0);
+            const xPad = (Math.max(...tV) - Math.min(...tV)) * 0.1 || 1;
+            const yPad = (Math.max(...yV) - Math.min(...yV)) * 0.1 || 1;
+            return JSON.stringify({
+                version: 11, randomSeed: 'physys',
+                graph: {
+                    viewport: { xmin: Math.min(...tV) - xPad, xmax: Math.max(...tV) + xPad, ymin: Math.min(...yV) - yPad, ymax: Math.max(...yV) + yPad },
+                    xAxisLabel: 't (' + timeUnitLabel() + ')',
+                    yAxisLabel: vars[0].label + ' (' + vars[0].unit + ')'
+                },
+                expressions: { list: [{ type: 'table', columns: columns, id: 'physys_table' }] }
+            });
+        }
+
+        // ── Helper: generar Visor HTML de Desmos ──
+        function buildDesmosHTML() {
+            const stateJson = buildDesmosFile();
+            return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor Desmos - Physys Lab</title>
+<script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
+<style>body,html{margin:0;padding:0;height:100%;overflow:hidden;}</style>
+</head>
+<body>
+<div id="calculator" style="width:100vw;height:100vh;"></div>
+<script>
+var elt = document.getElementById('calculator');
+var calc = Desmos.GraphingCalculator(elt, {
+    keypad: true,
+    expressions: true,
+    settingsMenu: true,
+    zoomButtons: true
+});
+calc.setState(${stateJson});
+</script>
+</body>
+</html>`;
+        }
+
+        // ── Helper: mostrar feedback ──
+        function showDesmosMsg(html, color) {
+            modal.querySelectorAll('.desmos-msg').forEach(el => el.remove());
+            const msg = document.createElement('div');
+            msg.className = 'desmos-msg';
+            msg.style.cssText = 'color:' + color + ';font-size:12px;text-align:center;margin:8px 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:8px;line-height:1.6';
+            msg.innerHTML = html;
+            const closeBtn = modal.querySelector('[style*="border: 1px solid #ef4444"]');
+            modal.insertBefore(msg, closeBtn || modal.lastChild);
+        }
+
+        // ━━━ BOTÓN 1: Descargar para Desmos ━━━
+        mkBtn('📊 Descargar para Desmos', 'linear-gradient(135deg,#059669,#10b981)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const fname = 'physys_' + sn + '.desmos';
+            showDesmosMsg('⏳ Preparando archivo...', '#94a3b8');
+            serverDownload(buildDesmosFile(), fname, 'application/octet-stream')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>' + fname + '</b> descargado<br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Abre <b>desmos.com/calculator</b><br>' +
+                        '3. Menú <b>≡</b> → <b>Abrir</b> → busca el archivo</small>',
+                        '#6ee7b7'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar descarga. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ BOTÓN 2: Descargar CSV (Sheets/Excel) ━━━
+        mkBtn('📄 Descargar CSV (Sheets/Excel)', 'linear-gradient(135deg,#2563eb,#3b82f6)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const date = new Date().toISOString().slice(0,10);
+            const fname = 'physys_' + sn + '_' + date + '.csv';
+            showDesmosMsg('⏳ Preparando CSV...', '#94a3b8');
+            serverDownload(buildCSV(), fname, 'text/csv')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>CSV descargado</b> (' + count + ' filas)<br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Abre con <b>Google Sheets</b> o <b>Excel</b></small>',
+                        '#93c5fd'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar CSV. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ BOTÓN 3: Descargar Visor Desmos (HTML) ━━━
+        mkBtn('📱 Descargar Visor Interactivo (HTML)', 'linear-gradient(135deg,#8b5cf6,#7c3aed)', () => {
+            const sn = tabConf.sensor || 'datos';
+            const fname = 'physys_' + sn + '_visor.html';
+            showDesmosMsg('⏳ Preparando Visor HTML...', '#94a3b8');
+            serverDownload(buildDesmosHTML(), fname, 'text/html')
+                .then(() => {
+                    showDesmosMsg(
+                        '📥 <b>Visor HTML descargado</b><br>' +
+                        '<small style="color:#fbbf24"><b>Pasos:</b><br>' +
+                        '1. Desconéctate del WiFi <b>Physys-Lab</b><br>' +
+                        '2. Toca el archivo <b>' + fname + '</b> descargado para abrir tu gráfica interactiva en el navegador.</small>',
+                        '#c4b5fd'
+                    );
+                })
+                .catch(() => {
+                    showDesmosMsg('❌ Error al preparar Visor. Reintenta.', '#ef4444');
+                });
+        });
+
+        // ━━━ Instrucciones visuales ━━━
+        const instrDiv = document.createElement('div');
+        instrDiv.style.cssText = 'margin:10px 0 0;padding:10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;font-size:11px;color:#94a3b8;line-height:1.5;text-align:left';
+        instrDiv.innerHTML =
+            '<div style="color:#fbbf24;font-weight:700;margin-bottom:4px;text-align:center">⚡ Flujo rápido</div>' +
+            '① Toca <b>Descargar</b> arriba<br>' +
+            '② <b>Desconéctate</b> del WiFi Physys-Lab<br>' +
+            '③ Abre <b>Desmos</b> o <b>Google Sheets</b><br>' +
+            '④ <b>Importa</b> el archivo descargado';
+        modal.appendChild(instrDiv);
+    }
+
     if (count === 0) {
         const warn = document.createElement('p');
         warn.style.cssText = 'font-size:12px;color:#f0b429;text-align:center;margin-bottom:12px';
@@ -1435,6 +1734,178 @@ function openExportModal() {
     overlay.appendChild(modal);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
+}
+
+// ─── Desmos List Modal (x₁ y y₁ separados para copiar uno a uno) ───
+function showDesmosListModal(lists) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;justify-content:center;align-items:center;z-index:10000;backdrop-filter:blur(6px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:20px;border-radius:16px;width:92%;max-width:500px;max-height:90vh;color:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;overflow-y:auto';
+
+    const title = document.createElement('h3');
+    title.innerHTML = '📊 Listas para Desmos';
+    title.style.cssText = 'margin:0 0 8px 0;color:#10b981;font-size:16px';
+    modal.appendChild(title);
+
+    const steps = document.createElement('div');
+    steps.style.cssText = 'font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.6;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px';
+    steps.innerHTML =
+        '<b style="color:#f0b429">Pasos en Desmos:</b><br>' +
+        '1️⃣ Copia x₁ → pega en <b>línea vacía</b> (no en tabla)<br>' +
+        '2️⃣ Vuelve aquí, copia y₁ → pega en la <b>siguiente línea</b><br>' +
+        '3️⃣ En una nueva línea escribe: <b style="color:#6ee7b7">(x₁, y₁)</b>';
+    modal.appendChild(steps);
+
+    // Función para crear bloque de lista
+    function makeListBlock(label, value, color) {
+        const block = document.createElement('div');
+        block.style.cssText = 'margin-bottom:10px';
+
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:11px;color:' + color + ';font-weight:700;margin-bottom:4px';
+        lbl.textContent = label + ' (' + value.split(',').length + ' valores)';
+        block.appendChild(lbl);
+
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.readOnly = true;
+        area.style.cssText = 'width:100%;height:60px;background:#0f172a;color:#e2e8f0;border:1px solid ' + color + ';border-radius:8px;padding:8px;font-size:10px;font-family:monospace;resize:none;line-height:1.3';
+        block.appendChild(area);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:6px;margin-top:4px';
+
+        const btnSel = document.createElement('button');
+        btnSel.innerHTML = '🔵 Seleccionar';
+        btnSel.style.cssText = 'flex:1;padding:8px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer';
+        btnSel.onclick = () => {
+            area.focus(); area.select();
+            area.setSelectionRange(0, value.length);
+            btnSel.innerHTML = '✅ ¡Seleccionado! Mantén pulsado → Copiar';
+            btnSel.style.background = '#059669';
+            setTimeout(() => { btnSel.innerHTML = '🔵 Seleccionar'; btnSel.style.background = 'linear-gradient(135deg,#2563eb,#3b82f6)'; }, 4000);
+        };
+        btnRow.appendChild(btnSel);
+        block.appendChild(btnRow);
+
+        return block;
+    }
+
+    modal.appendChild(makeListBlock('x₁ (tiempo en ' + timeUnitLabel() + ')', lists.x, '#3b82f6'));
+    modal.appendChild(makeListBlock('y₁ (' + lists.label + ' en ' + lists.unit + ')', lists.y, '#10b981'));
+
+    // Info
+    const info = document.createElement('p');
+    info.style.cssText = 'font-size:11px;color:#64748b;text-align:center;margin:4px 0';
+    info.textContent = lists.count + ' puntos • Luego escribe (x₁, y₁) en Desmos para graficar';
+    modal.appendChild(info);
+
+    // Cerrar
+    const btnClose = document.createElement('button');
+    btnClose.textContent = 'Cerrar';
+    btnClose.style.cssText = 'width:100%;padding:10px;margin-top:8px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px;font-size:13px;cursor:pointer';
+    btnClose.onclick = () => overlay.remove();
+    modal.appendChild(btnClose);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+}
+
+// ─── Manual Copy Modal (Fallback para móvil cuando Clipboard API falla) ───
+function showManualCopyModal(tsvText) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;justify-content:center;align-items:center;z-index:10000;backdrop-filter:blur(6px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:20px;border-radius:16px;width:92%;max-width:500px;max-height:85vh;color:#fff;box-shadow:0 25px 60px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;overflow:hidden';
+
+    // Título
+    const title = document.createElement('h3');
+    title.innerHTML = '📝 Copiar datos manualmente';
+    title.style.cssText = 'margin:0 0 4px 0;color:#14f0c5;font-size:16px';
+    modal.appendChild(title);
+
+    // Instrucciones
+    const steps = document.createElement('div');
+    steps.style.cssText = 'font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.6';
+    steps.innerHTML = 
+        '<b style="color:#f0b429">Instrucciones para celular:</b><br>' +
+        '1️⃣ Toca <b>"Seleccionar Todo"</b> abajo<br>' +
+        '2️⃣ Mantén pulsado el texto → <b>Copiar</b><br>' +
+        '3️⃣ Abre la app <b>Desmos</b><br>' +
+        '4️⃣ Toca <b>+</b> → <b>Tabla</b> → pega en la primera celda';
+    modal.appendChild(steps);
+
+    // Textarea con datos
+    const area = document.createElement('textarea');
+    area.value = tsvText;
+    area.readOnly = true;
+    area.style.cssText = 'width:100%;flex:1;min-height:150px;max-height:40vh;background:#0f172a;color:#e2e8f0;border:2px solid #3b82f6;border-radius:10px;padding:12px;font-size:11px;font-family:monospace;resize:none;line-height:1.4';
+    modal.appendChild(area);
+
+    // Info de filas
+    const info = document.createElement('p');
+    const lines = tsvText.split('\n').length - 1;
+    info.style.cssText = 'font-size:11px;color:#64748b;margin:6px 0;text-align:center';
+    info.textContent = lines + ' filas de datos • ' + (new Blob([tsvText]).size / 1024).toFixed(1) + ' KB';
+    modal.appendChild(info);
+
+    // Botones
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+    const btnSelect = document.createElement('button');
+    btnSelect.innerHTML = '🔵 Seleccionar Todo';
+    btnSelect.className = 'btn-action';
+    btnSelect.style.cssText = 'flex:1;padding:12px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer';
+    btnSelect.onclick = () => {
+        area.focus();
+        area.select();
+        area.setSelectionRange(0, tsvText.length);
+        btnSelect.innerHTML = '✅ ¡Seleccionado! — Mantén pulsado → Copiar';
+        btnSelect.style.background = 'linear-gradient(135deg,#059669,#10b981)';
+        setTimeout(() => {
+            btnSelect.innerHTML = '🔵 Seleccionar Todo';
+            btnSelect.style.background = 'linear-gradient(135deg,#2563eb,#3b82f6)';
+        }, 4000);
+    };
+
+    const btnClose = document.createElement('button');
+    btnClose.textContent = '✕';
+    btnClose.className = 'btn-action';
+    btnClose.style.cssText = 'width:48px;padding:12px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px;font-size:16px;cursor:pointer';
+    btnClose.onclick = () => overlay.remove();
+
+    btnRow.appendChild(btnSelect);
+    btnRow.appendChild(btnClose);
+    modal.appendChild(btnRow);
+
+    // Botón compartir como alternativa (si está disponible)
+    if (navigator.share) {
+        const btnShare = document.createElement('button');
+        btnShare.innerHTML = '📤 O comparte como archivo TSV';
+        btnShare.className = 'btn-action';
+        btnShare.style.cssText = 'width:100%;padding:10px;margin-top:6px;background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);border-radius:10px;font-size:12px;cursor:pointer';
+        btnShare.onclick = () => {
+            const file = new File([tsvText], 'physys_datos.tsv', { type: 'text/tab-separated-values' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
+            } else {
+                navigator.share({ title: 'Physys Lab', text: tsvText }).catch(() => {});
+            }
+        };
+        modal.appendChild(btnShare);
+    }
+
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+
+    // Auto-seleccionar el texto
+    setTimeout(() => { area.focus(); area.select(); }, 100);
 }
 
 function fetchConfig() {
@@ -1786,4 +2257,685 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Redraw chart on resize
     window.addEventListener('resize', drawChart);
+
+    // KEYBOARD SUBMIT IN AUTH INPUT
+    if ($('auth-input')) {
+        $('auth-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitAuth();
+            }
+        });
+    }
+
+    // GPIO Board Interactive Clicks for direct reassociation
+    const gvBoard = document.querySelector('.gv-board');
+    if (gvBoard) {
+        gvBoard.addEventListener('click', (e) => {
+            const pinEl = e.target.closest('.gv-pin');
+            if (!pinEl) return;
+
+            if (currentUserRole !== 'teacher') {
+                showNotification('🔒 Solo el Docente puede configurar los pines de forma interactiva.', '#ff4d6a');
+                return;
+            }
+
+            const gpioNum = parseInt(pinEl.getAttribute('data-gpio'));
+            if (!isNaN(gpioNum)) {
+                showPinConfigTooltip(gpioNum, pinEl);
+            }
+        });
+    }
+
+    // Captive Portal detection and full-screen premium guide on load
+    const hostname = location.hostname;
+    if (hostname && hostname !== '192.168.4.1' && hostname !== 'physyslab.local' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        showCaptivePortalOverlay();
+    }
+
+    // Initial role and hardware UI sync
+    syncRoleUI();
 });
+
+// ─── MULTI-USER ROLE MANAGEMENT & HARDWARE PROFILE UTILITIES ───
+const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47];
+
+function syncRoleUI() {
+    const isLocked = (currentUserRole === 'student');
+    const writeButtons = [
+        'btn-record', 'btn-sensor-rec', 'btn-sensor-tare', 'btn-sensor-invert',
+        'btn-sensor-reset-enc', 'btn-trigger', 'btn-trigger-stop', 'btn-clear-esp', 
+        'btn-save-config', 'btn-reboot', 'btn-save-script', 'btn-load-script',
+        'btn-config-reset-enc', 'btn-config-tare'
+    ];
+    
+    writeButtons.forEach(id => {
+        const btn = $(id);
+        if (!btn) return;
+        if (isLocked) {
+            btn.classList.add('lock-disabled');
+            btn.setAttribute('disabled', 'true');
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+        } else {
+            btn.classList.remove('lock-disabled');
+            btn.removeAttribute('disabled');
+            btn.style.opacity = '';
+            btn.style.cursor = '';
+        }
+    });
+
+    // Intercept student action triggers via capturing listener if locked
+    if (!window.hasRoleCapturingListener) {
+        document.body.addEventListener('click', (e) => {
+            const btn = e.target.closest('.lock-disabled');
+            if (btn) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isLeaderActive) {
+                    showNotification(`⚠️ Control bloqueado. Mesa bajo control del Líder activo en IP ${leaderIp}.`, '#ff4d6a');
+                } else {
+                    showNotification(`🔒 Acción bloqueada. Solo un Líder de Mesa o el Docente pueden realizar esta acción.`, '#ff4d6a');
+                }
+            }
+        }, true);
+        window.hasRoleCapturingListener = true;
+    }
+
+    // Role badge representation
+    const badge = $('role-badge');
+    const roleText = $('role-text');
+    if (badge && roleText) {
+        badge.className = 'role-badge';
+        if (currentUserRole === 'student') {
+            badge.classList.add('role-student');
+            roleText.innerHTML = '🔒 Estudiante (Solo Lectura)';
+        } else if (currentUserRole === 'leader') {
+            badge.classList.add('role-leader');
+            roleText.innerHTML = '⭐ Líder de Mesa';
+        } else if (currentUserRole === 'teacher') {
+            badge.classList.add('role-teacher');
+            roleText.innerHTML = '🎓 Docente (Admin)';
+        }
+    }
+
+    // Dynamic body classes for role-based CSS rules
+    document.body.classList.remove('role-student', 'role-leader', 'role-teacher');
+    document.body.classList.add('role-' + currentUserRole);
+
+    // Disable/enable pin profile selections according to the role and preset state
+    const canEditPins = (currentUserRole === 'teacher');
+    const profileSelect = $('pin-profile-select');
+    if (profileSelect) {
+        profileSelect.disabled = !canEditPins;
+    }
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    selects.forEach(id => {
+        const el = $(id);
+        if (el) {
+            const isCustom = (profileSelect && profileSelect.value === 'custom');
+            el.disabled = !canEditPins || !isCustom;
+        }
+    });
+
+    // Disable/enable general configuration inputs (Students can only view)
+    const canEditConfig = (currentUserRole === 'teacher' || currentUserRole === 'leader');
+    const configInputs = [
+        'tof_model', 'tof_range', 'sample_rate', 'tube_length',
+        'invert-encoder-check', 'config-hx-filter-check', 'config-hx-stability-check',
+        'hx-filter-check', 'hx-stability-check', 'auto-stop-dist'
+    ];
+    configInputs.forEach(id => {
+        const el = $(id);
+        if (el) el.disabled = !canEditConfig;
+    });
+
+    // Toggle teacher settings panel (only for Docente)
+    const teacherSettings = $('gv-teacher-settings');
+    if (teacherSettings) {
+        teacherSettings.style.display = canEditPins ? 'block' : 'none';
+    }
+
+    // Update status bar text beautifully
+    updateLeaderStatusBanner();
+}
+
+function openAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    selectRole(currentUserRole === 'student' ? 'leader' : currentUserRole);
+}
+
+function closeAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+}
+
+function selectRole(role) {
+    selectedAuthRole = role;
+    
+    // Update active visual card state
+    ['student', 'leader', 'teacher'].forEach(r => {
+        const card = $('rc-' + r);
+        if (card) card.classList.remove('active');
+    });
+    
+    const activeCard = $('rc-' + role);
+    if (activeCard) activeCard.classList.add('active');
+    
+    // Show/hide PIN entry container
+    const entryContainer = $('pin-entry-container');
+    const label = $('pin-label');
+    const input = $('auth-input');
+    
+    if (role === 'student') {
+        if (entryContainer) entryContainer.style.display = 'none';
+        // Auto validation for student mode as it is completely passwordless
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('DEAUTH');
+        }
+        closeAuthModal();
+    } else {
+        if (entryContainer) entryContainer.style.display = 'block';
+        if (label) {
+            label.textContent = (role === 'leader') ? 'Ingrese PIN de Mesa (1234):' : 'Ingrese Contraseña Docente:';
+        }
+        if (input) {
+            input.value = '';
+            input.placeholder = (role === 'leader') ? '••••' : 'Contraseña';
+            input.type = (role === 'leader') ? 'number' : 'password';
+            input.focus();
+        }
+    }
+}
+
+function submitAuth() {
+    const role = selectedAuthRole;
+    if (role === 'student') {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('DEAUTH');
+        }
+        closeAuthModal();
+        return;
+    }
+    
+    const input = $('auth-input');
+    if (!input) return;
+    const value = input.value.trim();
+    if (!value) {
+        showNotification('⚠️ Por favor ingrese el PIN o la clave.', '#ff4d6a');
+        return;
+    }
+    
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('AUTH:' + value);
+    } else {
+        showNotification('❌ Error: Sin conexión con la tarjeta', '#ff4d6a');
+    }
+}
+
+function applyPinProfilePreset(preset) {
+    const isCustom = (preset === 'custom');
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    
+    const presets = {
+        basic: {
+            'pin-tof-sda': '4',
+            'pin-tof-scl': '5',
+            'pin-enc-sda': '10',
+            'pin-enc-scl': '11',
+            'pin-hx-dt': '6',
+            'pin-hx-sck': '7'
+        },
+        cam: {
+            'pin-tof-sda': '1',
+            'pin-tof-scl': '47',
+            'pin-enc-sda': '14',
+            'pin-enc-scl': '21',
+            'pin-hx-dt': '41',
+            'pin-hx-sck': '42'
+        }
+    };
+    
+    if (preset !== 'custom') {
+        const valMap = presets[preset];
+        for (const [id, val] of Object.entries(valMap)) {
+            const el = $(id);
+            if (el) {
+                // Forzar que exista la opción antes de asignar
+                if (!Array.from(el.options).some(opt => opt.value == val)) {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.text = 'GPIO ' + val;
+                    el.appendChild(opt);
+                }
+                el.value = val;
+                el.disabled = true;
+            }
+        }
+    } else {
+        selects.forEach(id => {
+            const el = $(id);
+            if (el) el.disabled = false;
+        });
+    }
+}
+
+function populatePinSelectors() {
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    
+    // Camera pins to flag in red
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+
+    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    selectors.forEach(id => {
+        const selectEl = $(id);
+        if (!selectEl) return;
+        
+        const currentVal = selectEl.value;
+        
+        selectEl.innerHTML = SAFE_PINS.map(pin => {
+            const isBlocked = blockedPins.includes(pin);
+            const label = 'GPIO ' + pin + (isBlocked ? ' ⚠️ (Cámara)' : '');
+            const disabledAttr = isBlocked ? ' style="color:#f87171;"' : '';
+            return `<option value="${pin}"${disabledAttr}>${label}</option>`;
+        }).join('');
+        
+        if (activeHardwareProfile.pins) {
+            const pinKey = id.replace('pin-', '').replace('-', '_');
+            const activePin = activeHardwareProfile.pins[pinKey];
+            if (activePin !== undefined) {
+                selectEl.value = activePin;
+            }
+        } else if (currentVal) {
+            selectEl.value = currentVal;
+        }
+    });
+
+    // Detectar si el pinout actual corresponde a Básico o Cámara para marcar el selector de perfiles
+    if (activeHardwareProfile.pins) {
+        const p = activeHardwareProfile.pins;
+        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7);
+        const isCam = (p.tof_sda == 1 && p.tof_scl == 2 && p.enc_sda == 3 && p.enc_scl == 14 && p.hx_dt == 21 && p.hx_sck == 26);
+        
+        const profileSelect = $('pin-profile-select');
+        if (profileSelect) {
+            if (isBasic) {
+                profileSelect.value = 'basic';
+                applyPinProfilePreset('basic');
+            } else if (isCam) {
+                profileSelect.value = 'cam';
+                applyPinProfilePreset('cam');
+            } else {
+                profileSelect.value = 'custom';
+                applyPinProfilePreset('custom');
+            }
+        }
+        
+        // Dynamically synchronize the sidebar ESP32 hardware diagram with the active pins configuration
+        updateSidebarDiagram();
+    }
+}
+
+function applyCustomPins() {
+    if (currentUserRole !== 'teacher') {
+        showNotification('⚠️ Solo el Docente puede cambiar los pines de hardware.', '#ff4d6a');
+        return;
+    }
+
+    const tofSda = parseInt($('pin-tof-sda').value);
+    const tofScl = parseInt($('pin-tof-scl').value);
+    const encSda = parseInt($('pin-enc-sda').value);
+    const encScl = parseInt($('pin-enc-scl').value);
+    const hxDt = parseInt($('pin-hx-dt').value);
+    const hxSck = parseInt($('pin-hx-sck').value);
+
+    // Unique values assertion (ignorando NaN si los hay)
+    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck].filter(v => !isNaN(v));
+    const uniqueValues = new Set(values);
+    if (uniqueValues.size !== values.length || values.length !== 6) {
+        alert('❌ Error: Faltan pines por asignar o hay pines duplicados.');
+        return;
+    }
+
+    // Camera overlap detection and warnings
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    
+    const overlap = values.filter(v => blockedPins.includes(v));
+    if (overlap.length > 0) {
+        if (!confirm(`⚠️ Advertencia de Conflicto de Cámara:\n\nLos pines [${overlap.join(', ')}] están ocupados por el bus de la cámara conectada.\nSi continúas, podrías experimentar fallos en el sistema o daños de comunicación.\n\n¿Estás seguro de que deseas aplicar esta configuración de pines?`)) {
+            return;
+        }
+    }
+
+    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck}`;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(cmd);
+        showNotification('🔌 Enviando reasignación de pines a la tarjeta...', '#38bdf8');
+    }
+}
+
+function updateHardwareStatusBanner() {
+    const banner = $('gv-auto-banner');
+    if (!banner) return;
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const type = activeHardwareProfile.type;
+
+    if (isCamera) {
+        banner.style.display = 'block';
+        banner.className = 'gv-banner camera-active';
+        if (type === 'freenove_cam') {
+            banner.innerHTML = `<strong>📸 Cámara Físicamente Conectada (Perfil Freenove CAM)</strong><br>
+            Los pines del bus de la cámara (GPIOs 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42) están bloqueados por hardware. Los sensores se reubican por defecto en: <strong>ToF: 1/2, Encoder: 3/14, HX711: 21/26</strong> para evitar interferencias.`;
+        } else {
+            banner.innerHTML = `<strong>📸 Cámara Físicamente Conectada (Perfil CAM Estándar)</strong><br>
+            La cámara está en uso (SDA: 17, SCL: 18). Los pines del bus de cámara se encuentran ocupados.`;
+        }
+    } else {
+        banner.style.display = 'block';
+        banner.className = 'gv-banner camera-inactive';
+        banner.innerHTML = `<strong>ℹ️ Placa Base Estándar Activa (Sin Cámara Detectada)</strong><br>
+        Todos los pines del microcontrolador están libres para uso general. Los sensores están asignados al estándar: <strong>ToF: 4/5, Encoder: 10/11, HX711: 6/7</strong>.`;
+    }
+}
+
+function updateLeaderStatusBanner() {
+    if (isLeaderActive && currentUserRole !== 'leader' && currentUserRole !== 'teacher') {
+        setStatus(`🔒 Control bloqueado por Mesa en IP ${leaderIp}`, '#f0b429');
+    } else if (currentUserRole === 'leader') {
+        setStatus('⭐ Líder de Mesa (Modo Control Activo)', '#eab308');
+    } else if (currentUserRole === 'teacher') {
+        setStatus('🎓 Docente (Modo Administrador)', '#38bdf8');
+    } else {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            setStatus('Conectado', '#14f0c5');
+        } else {
+            setStatus('Desconectado', '#ff4d6a');
+        }
+    }
+}
+
+function showNotification(message, color = '#14f0c5') {
+    let container = $('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999;pointer-events:none;max-width:320px;';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'glass-card';
+    toast.style.cssText = `
+        background: rgba(30, 41, 59, 0.95);
+        color: #fff;
+        padding: 12px 18px;
+        border-radius: 12px;
+        border-left: 4px solid ${color};
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 15px ${color}33;
+        font-size: 13px;
+        font-weight: 500;
+        pointer-events: auto;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        backdrop-filter: blur(8px);
+    `;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// ─── DYNAMIC HARDWARE DIAGRAM, DIRECT PIN TOOLTIPS, AND CAPTIVE PORTAL ONBOARDING ───
+
+function updateSidebarDiagram() {
+    const leftCol = document.querySelector('.pins-col.pins-left');
+    const rightCol = document.querySelector('.pins-col.pins-right');
+    if (!leftCol || !rightCol || !activeHardwareProfile.pins) return;
+
+    const p = activeHardwareProfile.pins;
+
+    leftCol.innerHTML = `
+        <div class="p-node i2c" data-gpio="${p.tof_sda}"><span class="pin-num">${p.tof_sda}</span> TOF-SDA</div>
+        <div class="p-node i2c" data-gpio="${p.tof_scl}"><span class="pin-num">${p.tof_scl}</span> TOF-SCL</div>
+        <div class="p-node serial" data-gpio="${p.hx_dt}"><span class="pin-num">${p.hx_dt}</span> HX-DT</div>
+        <div class="p-node serial" data-gpio="${p.hx_sck}"><span class="pin-num">${p.hx_sck}</span> HX-SCK</div>
+    `;
+
+    rightCol.innerHTML = `
+        <div class="p-node i2c" data-gpio="${p.enc_sda}"><span class="pin-num">${p.enc_sda}</span> ENC-SDA</div>
+        <div class="p-node i2c" data-gpio="${p.enc_scl}"><span class="pin-num">${p.enc_scl}</span> ENC-SCL</div>
+        <div class="p-node led" data-gpio="48"><span class="pin-num">48</span> WS2812</div>
+        <div class="p-node boot-pin" data-gpio="0"><span class="pin-num">0</span> BOOT</div>
+    `;
+}
+
+let currentGvTooltip = null;
+
+function showPinConfigTooltip(gpioNum, targetEl) {
+    if (currentGvTooltip) {
+        currentGvTooltip.remove();
+        currentGvTooltip = null;
+    }
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    const isBlocked = blockedPins.includes(gpioNum);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'gv-tooltip glass-card';
+    
+    // Position tooltip near targetEl
+    const rect = targetEl.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
+    if (rect.left > window.innerWidth / 2) {
+        tooltip.style.left = (rect.left + scrollLeft - 190) + 'px';
+    } else {
+        tooltip.style.left = (rect.right + scrollLeft + 10) + 'px';
+    }
+    tooltip.style.top = (rect.top + scrollTop) + 'px';
+
+    const titleColor = isBlocked ? '#f87171' : '#38bdf8';
+    const warningMsg = isBlocked ? `<div style="font-size:0.6rem; color:#f87171; text-align:center; margin-bottom:8px; line-height:1.2;">⚠️ Reservado por Cámara</div>` : '';
+
+    tooltip.innerHTML = `
+        <div class="gv-tooltip-header" style="color: ${titleColor};">📌 Configurar GPIO ${gpioNum}</div>
+        ${warningMsg}
+        <div class="gv-tooltip-options">
+            <button onclick="assignPinTo(${gpioNum}, 'pin-tof-sda')">ToF SDA</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-tof-scl')">ToF SCL</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-enc-sda')">Encoder SDA</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-enc-scl')">Encoder SCL</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-hx-dt')">HX711 DT</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-hx-sck')">HX711 SCK</button>
+            <button class="btn-danger" style="margin-top:4px;" onclick="assignPinTo(${gpioNum}, 'release')">Liberar Pin</button>
+        </div>
+    `;
+
+    document.body.appendChild(tooltip);
+    currentGvTooltip = tooltip;
+
+    // Close tooltip on click outside
+    setTimeout(() => {
+        const closeHandler = (e) => {
+            if (tooltip && !tooltip.contains(e.target) && e.target !== targetEl && !targetEl.contains(e.target)) {
+                tooltip.remove();
+                if (currentGvTooltip === tooltip) currentGvTooltip = null;
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('click', closeHandler);
+    }, 10);
+}
+
+function assignPinTo(gpioNum, targetSelectId) {
+    if (currentGvTooltip) {
+        currentGvTooltip.remove();
+        currentGvTooltip = null;
+    }
+
+    if (targetSelectId === 'release') {
+        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+        let freed = false;
+        selectors.forEach(id => {
+            const el = $(id);
+            if (el && parseInt(el.value) === gpioNum) {
+                const currentlyAssigned = selectors.map(s => parseInt($(s)?.value || -1));
+                const freePin = SAFE_PINS.find(p => !currentlyAssigned.includes(p));
+                if (freePin !== undefined) {
+                    el.value = freePin;
+                    freed = true;
+                    showNotification(`📌 GPIO ${gpioNum} liberado. Sensor reasignado a GPIO ${freePin}.`, '#eab308');
+                }
+            }
+        });
+        if (!freed) {
+            showNotification(`ℹ️ GPIO ${gpioNum} no estaba asignado a ningún sensor.`, '#94a3b8');
+        }
+        return;
+    }
+
+    const selectEl = $(targetSelectId);
+    if (!selectEl) return;
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    
+    if (blockedPins.includes(gpioNum)) {
+        if (!confirm(`⚠️ Advertencia de Conflicto de Cámara:\n\nEl GPIO ${gpioNum} está reservado para la cámara.\nSi continúas asignándolo a este sensor, podrías provocar inestabilidad.\n\n¿Estás seguro de que deseas asignarlo?`)) {
+            return;
+        }
+    }
+
+    const profileSelect = $('pin-profile-select');
+    if (profileSelect && profileSelect.value !== 'custom') {
+        profileSelect.value = 'custom';
+        applyPinProfilePreset('custom');
+    }
+
+    selectEl.value = gpioNum;
+
+    selectEl.style.transition = 'all 0.3s ease';
+    selectEl.style.borderColor = '#eab308';
+    selectEl.style.boxShadow = '0 0 10px rgba(234, 179, 8, 0.4)';
+    setTimeout(() => {
+        selectEl.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        selectEl.style.boxShadow = 'none';
+    }, 1500);
+
+    const nameMap = {
+        'pin-tof-sda': 'ToF SDA',
+        'pin-tof-scl': 'ToF SCL',
+        'pin-enc-sda': 'Encoder SDA',
+        'pin-enc-scl': 'Encoder SCL',
+        'pin-hx-dt': 'HX711 DT',
+        'pin-hx-sck': 'HX711 SCK'
+    };
+
+    showNotification(`📌 GPIO ${gpioNum} asignado a ${nameMap[targetSelectId]}! Recuerda hacer clic en "💾 Guardar y Reiniciar ESP32" para aplicar los cambios.`, '#eab308');
+}
+
+function showCaptivePortalOverlay() {
+    let overlay = $('captive-portal-overlay');
+    if (overlay) return;
+
+    overlay = document.createElement('div');
+    overlay.id = 'captive-portal-overlay';
+    overlay.className = 'captive-portal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(10, 14, 26, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+        font-family: inherit;
+        color: #f3f4f6;
+    `;
+
+    const card = document.createElement('div');
+    card.className = 'glass-card';
+    card.style.cssText = `
+        max-width: 480px;
+        width: 100%;
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        background: rgba(15, 23, 42, 0.6);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+        text-align: center;
+    `;
+
+    card.innerHTML = `
+        <div style="font-size: 3rem; margin-bottom: 15px; animation: pulse 2s infinite;">📶</div>
+        <h2 style="margin: 0 0 10px 0; color: #38bdf8; font-size: 1.5rem; font-weight: 800;">Portal Cautivo Detectado</h2>
+        <p style="font-size: 0.88rem; color: #94a3b8; line-height: 1.5; margin-bottom: 24px;">
+            Estás usando el navegador limitado de tu sistema operativo. Para evitar que el celular te <strong>desconecte automáticamente</strong> y poder descargar tus datos:
+        </p>
+        <div style="text-align: left; background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem; line-height: 1.6;">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>
+                <span>Pulsa los <strong>tres puntos (⋮)</strong> arriba a la derecha (o <strong>Cancelar</strong> / <strong>Listo</strong> en iPhone).</span>
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>
+                <span>Selecciona <strong>"Mantener conexión sin internet"</strong> o <strong>"Usar esta red tal como está"</strong>.</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">3</span>
+                <span>Abre <strong>Chrome o Safari</strong> e ingresa a:<br><strong style="color: #eab308; font-size: 1rem; font-family: monospace; display: block; margin-top: 4px; text-align: center; background: rgba(234, 179, 8, 0.1); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.2);">http://192.168.4.1</strong></span>
+            </div>
+        </div>
+        <button id="btn-cp-continue" class="btn-action btn-gold" style="width: 100%; font-weight: bold; padding: 12px; border-radius: 10px; font-size: 0.9rem;">
+            Continuar en Portal Cautivo anyway
+        </button>
+    `;
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    $('btn-cp-continue').addEventListener('click', () => {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s ease-out';
+        setTimeout(() => overlay.remove(), 300);
+    });
+}
+

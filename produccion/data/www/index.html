@@ -19,6 +19,9 @@
                     <h1>Physys Lab <span class="v-tag">v9.0</span></h1>
                     <span class="subtitle" id="sys-status">Conectando...</span>
                 </div>
+                <div id="role-badge" class="role-badge role-student" onclick="openAuthModal()" title="Haz click para cambiar rol">
+                    <span class="role-icon">🔒</span> <span class="role-text" id="role-text">Estudiante (Solo Lectura)</span>
+                </div>
             </div>
             <div class="header-right">
                 <span id="battery-badge" class="battery-badge" title="Batería">🔋 --</span>
@@ -37,6 +40,7 @@
                 </select>
             </div>
             <div class="nav-actions">
+                <a href="manual.html" target="_blank" class="nav-icon-btn" id="btn-nav-manual" title="Manual Interactivo" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; line-height: 1;">📘</a>
                 <button class="nav-icon-btn" id="btn-nav-config" title="Configuración">⚙️</button>
                 <button class="nav-icon-btn" id="btn-nav-gpio" title="GPIO Viewer">📌</button>
             </div>
@@ -231,7 +235,7 @@
                                     <label class="switch"><input type="checkbox" id="invert-encoder-check" onchange="toggleInvertEncoder()"><span class="slider round"></span></label>
                                     <span>Invertir sentido de giro</span>
                                 </div>
-                                <button class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
+                                <button id="btn-config-reset-enc" class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
                             </div>
 
                             <!-- SECCIÓN 3: FUERZA -->
@@ -249,7 +253,7 @@
                                     <label class="switch"><input type="checkbox" id="config-hx-stability-check" onchange="toggleHxStability()"><span class="slider round"></span></label>
                                     <span>Estabilidad Alta (16-bit)</span>
                                 </div>
-                                <button class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
+                                <button id="btn-config-tare" class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
                             </div>
 
                             <!-- ACCIONES DE SISTEMA -->
@@ -329,8 +333,100 @@
                     <span class="gv-leg-item"><span class="gv-sq gv-high"></span> HIGH</span>
                     <span class="gv-leg-item"><span class="gv-sq gv-low"></span> LOW</span>
                 </div>
+                
+                <!-- BANNER DE AUTODETECCIÓN Y CONFIGURACIÓN DINÁMICA -->
+                <div id="gv-auto-banner" class="gv-banner" style="display:none;"></div>
+
+                <!-- CONFIGURACIÓN DE PINES (SOLO VISIBLE SI ES DOCENTE) -->
+                <div id="gv-teacher-settings" class="gv-teacher-settings glass-card" style="display:none; margin-top:20px; padding: 15px; border: 1px solid rgba(255,255,255,0.08);">
+                    <h3 style="margin:0 0 5px 0; color:#38bdf8; display:flex; align-items:center; gap:8px;">⚙️ Reasignación Avanzada de Pines (Rol Docente)</h3>
+                    <p class="config-desc" style="margin-bottom:15px; font-size:0.8rem; color:#94a3b8;">
+                        Modifica los pines físicos asignados a cada sensor. Los cambios se guardarán automáticamente en la NVS y reiniciarán el microcontrolador.
+                    </p>
+                    
+                    <div style="margin-bottom:15px; display:flex; flex-direction:column; gap:6px;">
+                        <label style="font-size:0.75rem; color:#94a3b8; font-weight:bold; display:block;">Perfil de Pines Preestablecido:</label>
+                        <select id="pin-profile-select" class="select-premium" onchange="applyPinProfilePreset(this.value)" style="width:100%; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(15, 23, 42, 0.6); padding: 8px;">
+                            <option value="basic">🔌 Perfil Básico (Estándar/Freenove sin cámara)</option>
+                            <option value="cam">📷 Perfil Cámara (ESP32-S3-CAM amigable)</option>
+                            <option value="custom" selected>🛠️ Perfil Personalizado (Asignar manualmente)</option>
+                        </select>
+                    </div>
+
+                    <div class="gv-pins-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">ToF SDA</label>
+                            <select id="pin-tof-sda" class="select-premium" style="width:100%"></select>
+                        </div>
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">ToF SCL</label>
+                            <select id="pin-tof-scl" class="select-premium" style="width:100%"></select>
+                        </div>
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">Encoder SDA</label>
+                            <select id="pin-enc-sda" class="select-premium" style="width:100%"></select>
+                        </div>
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">Encoder SCL</label>
+                            <select id="pin-enc-scl" class="select-premium" style="width:100%"></select>
+                        </div>
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">HX711 DT</label>
+                            <select id="pin-hx-dt" class="select-premium" style="width:100%"></select>
+                        </div>
+                        <div class="gv-pin-select-box">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:4px;">HX711 SCK</label>
+                            <select id="pin-hx-sck" class="select-premium" style="width:100%"></select>
+                        </div>
+                    </div>
+                    <button class="btn-action btn-gold" style="margin-top:15px; width:100%; font-weight:bold;" onclick="applyCustomPins()">💾 Guardar y Reiniciar ESP32</button>
+                </div>
             </div>
         </section>
+    </div>
+
+    <!-- MODAL DE AUTENTICACIÓN / ROLES -->
+    <div id="auth-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <h2 style="margin:0; font-size:1.25rem; color:#38bdf8; display:flex; align-items:center; gap:8px;">🔐 Acceso Seguro — Roles de Mesa</h2>
+                <button class="modal-close" onclick="closeAuthModal()" style="background:none; border:none; color:white; font-size:1.2rem; cursor:pointer;">✕</button>
+            </div>
+            <div class="modal-body" style="padding:15px 0 0 0;">
+                <p class="modal-desc" style="font-size:0.85rem; color:#94a3b8; margin-top:0; margin-bottom:20px; line-height:1.4;">
+                    El control de esta mesa de trabajo está protegido para evitar interferencias accidentales o maliciosas entre grupos de estudiantes.
+                </p>
+                <div class="role-selector-container" style="display:flex; flex-direction:column; gap:10px;">
+                    <div class="role-card active" id="rc-student" onclick="selectRole('student')" style="display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); cursor:pointer; transition:all 0.2s;">
+                        <span class="rc-icon" style="font-size:1.5rem;">👥</span>
+                        <div class="rc-info">
+                            <h4 style="margin:0; color:white; font-size:0.9rem;">Estudiante</h4>
+                            <p style="margin:0; font-size:0.75rem; color:#94a3b8;">Modo visualización. Solo lectura.</p>
+                        </div>
+                    </div>
+                    <div class="role-card" id="rc-leader" onclick="selectRole('leader')" style="display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); cursor:pointer; transition:all 0.2s;">
+                        <span class="rc-icon" style="font-size:1.5rem;">⭐</span>
+                        <div class="rc-info">
+                            <h4 style="margin:0; color:white; font-size:0.9rem;">Líder de Mesa</h4>
+                            <p style="margin:0; font-size:0.75rem; color:#94a3b8;">Control de mediciones y calibración. (PIN: 1234)</p>
+                        </div>
+                    </div>
+                    <div class="role-card" id="rc-teacher" onclick="selectRole('teacher')" style="display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); cursor:pointer; transition:all 0.2s;">
+                        <span class="rc-icon" style="font-size:1.5rem;">🎓</span>
+                        <div class="rc-info">
+                            <h4 style="margin:0; color:white; font-size:0.9rem;">Docente</h4>
+                            <p style="margin:0; font-size:0.75rem; color:#94a3b8;">Cambio de pines, python y reinicios. (Clave Docente)</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="pin-entry-container" style="display:none; margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:15px;">
+                    <label class="config-label" id="pin-label" style="font-size:0.8rem; color:#94a3b8; display:block; margin-bottom:6px;">Introduce PIN / Clave</label>
+                    <input type="password" id="auth-input" class="select-premium full-width" style="text-align:center; font-size:1.25rem; letter-spacing:4px;" placeholder="••••">
+                    <button class="btn-action btn-rec" style="width:100%; margin-top:15px; font-size:0.9rem; font-weight:bold;" onclick="submitAuth()">Validar Acceso</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="firebase-sync.js"></script>
