@@ -635,7 +635,72 @@ body {
     background: rgba(255,255,255,0.02);
 }
 .gv-pin:hover { background: rgba(255,255,255,0.06); }
-.gv-left .gv-pin { flex-direction: row-reverse; text-align: right; }
+.role-teacher .gv-pin, .role-leader .gv-pin {
+    cursor: pointer;
+}
+.role-teacher .gv-pin:hover, .role-leader .gv-pin:hover {
+    background: rgba(56, 189, 248, 0.15) !important;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+}
+.gv-left .gv-pin { flex-direction: row-reverse; text-align: right; border: 1px solid transparent; }
+.gv-right .gv-pin { border: 1px solid transparent; }
+
+/* Tooltip de Asignación de Pines */
+.gv-tooltip {
+    position: absolute;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.2);
+    border-radius: 8px;
+    padding: 10px;
+    z-index: 9999;
+    min-width: 180px;
+    animation: fadeInTooltip 0.15s ease-out;
+}
+@keyframes fadeInTooltip {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.gv-tooltip-header {
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: var(--accent-cyan);
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 4px;
+    text-align: center;
+}
+.gv-tooltip-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.gv-tooltip-options button {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+.gv-tooltip-options button:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: var(--accent-cyan);
+    color: white;
+    padding-left: 12px;
+}
+.gv-tooltip-options button.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #f87171;
+}
 .gv-pin-num {
     font-weight: 700; font-size: 0.6rem; min-width: 20px;
     text-align: center; color: var(--text-primary);
@@ -937,4 +1002,105 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 @media (max-width: 600px) {
     .config-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Multi-User Roles & Dynamic Pin Config (v9.3) ─── */
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-left: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.role-badge.role-student {
+    background: rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+}
+.role-badge.role-leader {
+    background: rgba(234, 179, 8, 0.1);
+    color: #facc15;
+    border-color: rgba(234, 179, 8, 0.3);
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.15);
+}
+.role-badge.role-teacher {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+.role-badge:hover {
+    transform: translateY(-1px) scale(1.02);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Modal Overlay & Card */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(5, 7, 16, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fade-in 0.25s ease-out;
+}
+.modal-card {
+    width: 90%;
+    max-width: 440px;
+    background: rgba(13, 18, 35, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 12px;
+}
+.modal-close:hover {
+    color: #ff4d6a !important;
+    transform: scale(1.1);
+    transition: all 0.2s;
+}
+
+.role-card:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    transform: translateY(-2px);
+}
+.role-card.active {
+    background: rgba(56, 189, 248, 0.08) !important;
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+
+/* GPIO Config Banner */
+.gv-banner {
+    margin-top: 15px;
+    padding: 12px 15px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.gv-banner.camera-active {
+    background: rgba(239, 68, 68, 0.06);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+.gv-banner.camera-inactive {
+    background: rgba(16, 185, 129, 0.06);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.2);
 }

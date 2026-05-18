@@ -79,6 +79,13 @@ let lastData = {};
 let currentChartStartTime = null;
 let lastDrawTime = 0; // Para throttling de dibujo
 
+// --- MULTI-USER ROLES & HARDWARE PROFILE VARIABLES ---
+let currentUserRole = sessionStorage.getItem('user_role') || "student";
+let isLeaderActive = false;
+let leaderIp = "";
+let selectedAuthRole = "student";
+let activeHardwareProfile = { camera_detected: false, type: "standard_base", pins: {} };
+
 // ─── DOM Elements ───
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -105,6 +112,7 @@ function connectWS() {
     ws.onopen = () => {
         setStatus('Conectado', '#14f0c5');
         updateSensorBadges({ tof: true, encoder: true, loadcell: true });
+        syncRoleUI();
     };
 
     ws.onclose = () => {
@@ -119,6 +127,77 @@ function connectWS() {
     ws.onmessage = (evt) => {
         try {
             const data = JSON.parse(evt.data);
+            
+            // --- NUEVOS CONTROLADORES DE ROL Y HARDWARE ---
+            if (data.auth) {
+                if (data.auth === "leader" && data.status === "success") {
+                    currentUserRole = "leader";
+                    sessionStorage.setItem('user_role', 'leader');
+                    showNotification("⭐ Autenticado como Líder de Mesa", "#eab308");
+                    closeAuthModal();
+                    syncRoleUI();
+                } else if (data.auth === "teacher" && data.status === "success") {
+                    currentUserRole = "teacher";
+                    sessionStorage.setItem('user_role', 'teacher');
+                    showNotification("🎓 Autenticado como Docente (Admin)", "#38bdf8");
+                    closeAuthModal();
+                    syncRoleUI();
+                } else if (data.auth === "student" && data.status === "busy") {
+                    showNotification("⚠️ ¡La mesa ya tiene un líder activo desde IP: " + data.ip + "!", "#ff4d6a");
+                } else if (data.auth === "student" && data.status === "fail") {
+                    showNotification("❌ PIN o Contraseña incorrecta", "#ff4d6a");
+                } else if (data.auth === "student") {
+                    currentUserRole = "student";
+                    sessionStorage.setItem('user_role', 'student');
+                    showNotification("🔒 Sesión cerrada. Rol de Estudiante activo.", "#94a3b8");
+                    syncRoleUI();
+                }
+                return;
+            }
+            
+            if (data.status) {
+                if (data.status === "leader_active") {
+                    isLeaderActive = true;
+                    leaderIp = data.ip;
+                    updateLeaderStatusBanner();
+                    showNotification("⭐ Líder de Mesa activo (IP: " + data.ip + ")", "#eab308");
+                } else if (data.status === "leader_deauthorized" || data.status === "leader_disconnected" || data.status === "leader_timeout") {
+                    isLeaderActive = false;
+                    leaderIp = "";
+                    if (currentUserRole === "leader") {
+                        currentUserRole = "student";
+                        sessionStorage.setItem('user_role', 'student');
+                        syncRoleUI();
+                    }
+                    updateLeaderStatusBanner();
+                    if (data.status === "leader_timeout") {
+                        showNotification("🔒 Control liberado por inactividad del Líder", "#ff4d6a");
+                    } else {
+                        showNotification("🔓 Control de mesa liberado", "#14f0c5");
+                    }
+                } else if (data.status === "teacher_timeout" || data.status === "teacher_disconnected") {
+                    if (currentUserRole === "teacher") {
+                        currentUserRole = "student";
+                        sessionStorage.setItem('user_role', 'student');
+                        syncRoleUI();
+                        showNotification("🔒 Sesión de Docente cerrada por inactividad o desconexión", "#ff4d6a");
+                    }
+                } else if (data.status === "pins_updated") {
+                    showNotification("🔌 Pines de hardware actualizados correctamente. Reiniciando tarjeta...", "#38bdf8");
+                    return;
+                }
+            }
+
+            if (data.hardware) {
+                activeHardwareProfile = data.hardware;
+                updateHardwareStatusBanner();
+                populatePinSelectors();
+            }
+            
+            if (data.error === "unauthorized") {
+                showNotification("⚠️ Acción rechazada: La mesa está controlada por el Líder activo en IP " + data.leader_ip, "#ff4d6a");
+                return;
+            }
             
             if (data.command === 'START' || data.command === 'RESET') {
                 currentChartStartTime = null;
@@ -1071,10 +1150,20 @@ function fetchSystemInfo() {
             if (data.config) {
                 if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
                 if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
-                if (data.config.usb_log !== undefined) $('usb-auto-log').checked = data.config.usb_log;
+                if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
             }
             if (data.sensors) {
                 updateSensorBadges(data.sensors);
+            }
+            if (data.hardware) {
+                activeHardwareProfile = data.hardware;
+                updateHardwareStatusBanner();
+                populatePinSelectors();
+            }
+            if (data.auth) {
+                isLeaderActive = data.auth.leader_active;
+                leaderIp = data.auth.leader_ip || "";
+                updateLeaderStatusBanner();
             }
         })
         .catch(() => {});
@@ -1197,17 +1286,32 @@ x_natural = 0.15    # Longitud natural (metros)
 let gvInterval = null;
 let gvActive = false;
 
+// ESP32-S3 WROOM-1 physical top-to-bottom layout mapping
+const leftOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14];
+const rightOrder = [21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2, 1, 26];
+
 function renderGpioPins(pins) {
     const leftCol = $('gv-left-pins');
     const rightCol = $('gv-right-pins');
     if (!leftCol || !rightCol) return;
 
-    // Split: GPIO 0-21 = left, 35-48 = right
-    const leftPins = pins.filter(p => p.g <= 21);
-    const rightPins = pins.filter(p => p.g >= 35);
+    // Filter and sort left pins
+    const leftPins = pins.filter(p => leftOrder.includes(p.g));
+    leftPins.sort((a, b) => leftOrder.indexOf(a.g) - leftOrder.indexOf(b.g));
+
+    // Filter and sort right pins (anything not in left row goes to right column)
+    const rightPins = pins.filter(p => !leftOrder.includes(p.g));
+    rightPins.sort((a, b) => {
+        const idxA = rightOrder.indexOf(a.g);
+        const idxB = rightOrder.indexOf(b.g);
+        if (idxA === -1 && idxB === -1) return a.g - b.g;
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+    });
 
     leftCol.innerHTML = leftPins.map(p =>
-        `<div class="gv-pin fn-${p.f}">
+        `<div class="gv-pin fn-${p.f}" data-gpio="${p.g}">
             <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
             <span class="gv-pin-num">${p.g}</span>
             <span class="gv-pin-label">${p.l}</span>
@@ -1215,7 +1319,7 @@ function renderGpioPins(pins) {
     ).join('');
 
     rightCol.innerHTML = rightPins.map(p =>
-        `<div class="gv-pin fn-${p.f}">
+        `<div class="gv-pin fn-${p.f}" data-gpio="${p.g}">
             <span class="gv-pin-state ${p.v ? 'high' : 'low'}"></span>
             <span class="gv-pin-num">${p.g}</span>
             <span class="gv-pin-label">${p.l}</span>
@@ -2153,4 +2257,668 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Redraw chart on resize
     window.addEventListener('resize', drawChart);
+
+    // KEYBOARD SUBMIT IN AUTH INPUT
+    if ($('auth-input')) {
+        $('auth-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitAuth();
+            }
+        });
+    }
+
+    // GPIO Board Interactive Clicks for direct reassociation
+    const gvBoard = document.querySelector('.gv-board');
+    if (gvBoard) {
+        gvBoard.addEventListener('click', (e) => {
+            const pinEl = e.target.closest('.gv-pin');
+            if (!pinEl) return;
+
+            if (currentUserRole !== 'teacher' && currentUserRole !== 'leader') {
+                showNotification('🔒 Solo el Líder de Mesa o el Docente pueden configurar los pines de forma interactiva.', '#ff4d6a');
+                return;
+            }
+
+            const gpioNum = parseInt(pinEl.getAttribute('data-gpio'));
+            if (!isNaN(gpioNum)) {
+                showPinConfigTooltip(gpioNum, pinEl);
+            }
+        });
+    }
+
+    // Captive Portal detection and full-screen premium guide on load
+    const hostname = location.hostname;
+    if (hostname && hostname !== '192.168.4.1' && hostname !== 'physyslab.local' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        showCaptivePortalOverlay();
+    }
+
+    // Initial role and hardware UI sync
+    syncRoleUI();
 });
+
+// ─── MULTI-USER ROLE MANAGEMENT & HARDWARE PROFILE UTILITIES ───
+const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47];
+
+function syncRoleUI() {
+    const isLocked = (currentUserRole === 'student' && isLeaderActive);
+    const writeButtons = [
+        'btn-record', 'btn-sensor-rec', 'btn-sensor-tare', 'btn-sensor-invert',
+        'btn-sensor-reset-enc', 'btn-trigger', 'btn-clear-esp', 'btn-save-config',
+        'btn-reboot', 'btn-save-script', 'btn-load-script'
+    ];
+    
+    writeButtons.forEach(id => {
+        const btn = $(id);
+        if (!btn) return;
+        if (isLocked) {
+            btn.classList.add('lock-disabled');
+            btn.setAttribute('disabled', 'true');
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+        } else {
+            btn.classList.remove('lock-disabled');
+            btn.removeAttribute('disabled');
+            btn.style.opacity = '';
+            btn.style.cursor = '';
+        }
+    });
+
+    // Intercept student action triggers via capturing listener if locked
+    if (!window.hasRoleCapturingListener) {
+        document.body.addEventListener('click', (e) => {
+            const btn = e.target.closest('.lock-disabled');
+            if (btn) {
+                e.preventDefault();
+                e.stopPropagation();
+                showNotification(`⚠️ Control bloqueado. Mesa bajo control del Líder activo en IP ${leaderIp}.`, '#ff4d6a');
+            }
+        }, true);
+        window.hasRoleCapturingListener = true;
+    }
+
+    // Role badge representation
+    const badge = $('role-badge');
+    const roleText = $('role-text');
+    if (badge && roleText) {
+        badge.className = 'role-badge';
+        if (currentUserRole === 'student') {
+            badge.classList.add('role-student');
+            roleText.innerHTML = '🔒 Estudiante (Solo Lectura)';
+        } else if (currentUserRole === 'leader') {
+            badge.classList.add('role-leader');
+            roleText.innerHTML = '⭐ Líder de Mesa';
+        } else if (currentUserRole === 'teacher') {
+            badge.classList.add('role-teacher');
+            roleText.innerHTML = '🎓 Docente (Admin)';
+        }
+    }
+
+    // Dynamic body classes for role-based CSS rules
+    document.body.classList.remove('role-student', 'role-leader', 'role-teacher');
+    document.body.classList.add('role-' + currentUserRole);
+
+    // Disable/enable pin profile selections according to the role and preset state
+    const canEditPins = (currentUserRole === 'teacher' || currentUserRole === 'leader');
+    const profileSelect = $('pin-profile-select');
+    if (profileSelect) {
+        profileSelect.disabled = !canEditPins;
+    }
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    selects.forEach(id => {
+        const el = $(id);
+        if (el) {
+            const isCustom = (profileSelect && profileSelect.value === 'custom');
+            el.disabled = !canEditPins || !isCustom;
+        }
+    });
+
+    // Toggle teacher/leader settings panel
+    const teacherSettings = $('gv-teacher-settings');
+    if (teacherSettings) {
+        teacherSettings.style.display = canEditPins ? 'block' : 'none';
+    }
+
+    // Update status bar text beautifully
+    updateLeaderStatusBanner();
+}
+
+function openAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    selectRole(currentUserRole === 'student' ? 'leader' : currentUserRole);
+}
+
+function closeAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+}
+
+function selectRole(role) {
+    selectedAuthRole = role;
+    
+    // Update active visual card state
+    ['student', 'leader', 'teacher'].forEach(r => {
+        const card = $('rc-' + r);
+        if (card) card.classList.remove('active');
+    });
+    
+    const activeCard = $('rc-' + role);
+    if (activeCard) activeCard.classList.add('active');
+    
+    // Show/hide PIN entry container
+    const entryContainer = $('pin-entry-container');
+    const label = $('pin-label');
+    const input = $('auth-input');
+    
+    if (role === 'student') {
+        if (entryContainer) entryContainer.style.display = 'none';
+        // Auto validation for student mode as it is completely passwordless
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('DEAUTH');
+        }
+        closeAuthModal();
+    } else {
+        if (entryContainer) entryContainer.style.display = 'block';
+        if (label) {
+            label.textContent = (role === 'leader') ? 'Ingrese PIN de Mesa (1234):' : 'Ingrese Contraseña Docente:';
+        }
+        if (input) {
+            input.value = '';
+            input.placeholder = (role === 'leader') ? '••••' : 'Contraseña';
+            input.type = (role === 'leader') ? 'number' : 'password';
+            input.focus();
+        }
+    }
+}
+
+function submitAuth() {
+    const role = selectedAuthRole;
+    if (role === 'student') {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('DEAUTH');
+        }
+        closeAuthModal();
+        return;
+    }
+    
+    const input = $('auth-input');
+    if (!input) return;
+    const value = input.value.trim();
+    if (!value) {
+        showNotification('⚠️ Por favor ingrese el PIN o la clave.', '#ff4d6a');
+        return;
+    }
+    
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('AUTH:' + value);
+    } else {
+        showNotification('❌ Error: Sin conexión con la tarjeta', '#ff4d6a');
+    }
+}
+
+function applyPinProfilePreset(preset) {
+    const isCustom = (preset === 'custom');
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    
+    const presets = {
+        basic: {
+            'pin-tof-sda': '4',
+            'pin-tof-scl': '5',
+            'pin-enc-sda': '10',
+            'pin-enc-scl': '11',
+            'pin-hx-dt': '6',
+            'pin-hx-sck': '7'
+        },
+        cam: {
+            'pin-tof-sda': '1',
+            'pin-tof-scl': '47',
+            'pin-enc-sda': '14',
+            'pin-enc-scl': '21',
+            'pin-hx-dt': '41',
+            'pin-hx-sck': '42'
+        }
+    };
+    
+    if (preset !== 'custom') {
+        const valMap = presets[preset];
+        for (const [id, val] of Object.entries(valMap)) {
+            const el = $(id);
+            if (el) {
+                // Forzar que exista la opción antes de asignar
+                if (!Array.from(el.options).some(opt => opt.value == val)) {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.text = 'GPIO ' + val;
+                    el.appendChild(opt);
+                }
+                el.value = val;
+                el.disabled = true;
+            }
+        }
+    } else {
+        selects.forEach(id => {
+            const el = $(id);
+            if (el) el.disabled = false;
+        });
+    }
+}
+
+function populatePinSelectors() {
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    
+    // Camera pins to flag in red
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+
+    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    selectors.forEach(id => {
+        const selectEl = $(id);
+        if (!selectEl) return;
+        
+        const currentVal = selectEl.value;
+        
+        selectEl.innerHTML = SAFE_PINS.map(pin => {
+            const isBlocked = blockedPins.includes(pin);
+            const label = 'GPIO ' + pin + (isBlocked ? ' ⚠️ (Cámara)' : '');
+            const disabledAttr = isBlocked ? ' style="color:#f87171;"' : '';
+            return `<option value="${pin}"${disabledAttr}>${label}</option>`;
+        }).join('');
+        
+        if (activeHardwareProfile.pins) {
+            const pinKey = id.replace('pin-', '').replace('-', '_');
+            const activePin = activeHardwareProfile.pins[pinKey];
+            if (activePin !== undefined) {
+                selectEl.value = activePin;
+            }
+        } else if (currentVal) {
+            selectEl.value = currentVal;
+        }
+    });
+
+    // Detectar si el pinout actual corresponde a Básico o Cámara para marcar el selector de perfiles
+    if (activeHardwareProfile.pins) {
+        const p = activeHardwareProfile.pins;
+        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7);
+        const isCam = (p.tof_sda == 1 && p.tof_scl == 2 && p.enc_sda == 3 && p.enc_scl == 14 && p.hx_dt == 21 && p.hx_sck == 26);
+        
+        const profileSelect = $('pin-profile-select');
+        if (profileSelect) {
+            if (isBasic) {
+                profileSelect.value = 'basic';
+                applyPinProfilePreset('basic');
+            } else if (isCam) {
+                profileSelect.value = 'cam';
+                applyPinProfilePreset('cam');
+            } else {
+                profileSelect.value = 'custom';
+                applyPinProfilePreset('custom');
+            }
+        }
+        
+        // Dynamically synchronize the sidebar ESP32 hardware diagram with the active pins configuration
+        updateSidebarDiagram();
+    }
+}
+
+function applyCustomPins() {
+    if (currentUserRole !== 'teacher' && currentUserRole !== 'leader') {
+        showNotification('⚠️ Solo un Líder de Mesa o Docente puede cambiar los pines de hardware.', '#ff4d6a');
+        return;
+    }
+
+    const tofSda = parseInt($('pin-tof-sda').value);
+    const tofScl = parseInt($('pin-tof-scl').value);
+    const encSda = parseInt($('pin-enc-sda').value);
+    const encScl = parseInt($('pin-enc-scl').value);
+    const hxDt = parseInt($('pin-hx-dt').value);
+    const hxSck = parseInt($('pin-hx-sck').value);
+
+    // Unique values assertion (ignorando NaN si los hay)
+    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck].filter(v => !isNaN(v));
+    const uniqueValues = new Set(values);
+    if (uniqueValues.size !== values.length || values.length !== 6) {
+        alert('❌ Error: Faltan pines por asignar o hay pines duplicados.');
+        return;
+    }
+
+    // Camera overlap detection and warnings
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    
+    const overlap = values.filter(v => blockedPins.includes(v));
+    if (overlap.length > 0) {
+        if (!confirm(`⚠️ Advertencia de Conflicto de Cámara:\n\nLos pines [${overlap.join(', ')}] están ocupados por el bus de la cámara conectada.\nSi continúas, podrías experimentar fallos en el sistema o daños de comunicación.\n\n¿Estás seguro de que deseas aplicar esta configuración de pines?`)) {
+            return;
+        }
+    }
+
+    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck}`;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(cmd);
+        showNotification('🔌 Enviando reasignación de pines a la tarjeta...', '#38bdf8');
+    }
+}
+
+function updateHardwareStatusBanner() {
+    const banner = $('gv-auto-banner');
+    if (!banner) return;
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const type = activeHardwareProfile.type;
+
+    if (isCamera) {
+        banner.style.display = 'block';
+        banner.className = 'gv-banner camera-active';
+        if (type === 'freenove_cam') {
+            banner.innerHTML = `<strong>📸 Cámara Físicamente Conectada (Perfil Freenove CAM)</strong><br>
+            Los pines del bus de la cámara (GPIOs 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42) están bloqueados por hardware. Los sensores se reubican por defecto en: <strong>ToF: 1/2, Encoder: 3/14, HX711: 21/26</strong> para evitar interferencias.`;
+        } else {
+            banner.innerHTML = `<strong>📸 Cámara Físicamente Conectada (Perfil CAM Estándar)</strong><br>
+            La cámara está en uso (SDA: 17, SCL: 18). Los pines del bus de cámara se encuentran ocupados.`;
+        }
+    } else {
+        banner.style.display = 'block';
+        banner.className = 'gv-banner camera-inactive';
+        banner.innerHTML = `<strong>ℹ️ Placa Base Estándar Activa (Sin Cámara Detectada)</strong><br>
+        Todos los pines del microcontrolador están libres para uso general. Los sensores están asignados al estándar: <strong>ToF: 4/5, Encoder: 10/11, HX711: 6/7</strong>.`;
+    }
+}
+
+function updateLeaderStatusBanner() {
+    if (isLeaderActive && currentUserRole !== 'leader' && currentUserRole !== 'teacher') {
+        setStatus(`🔒 Control bloqueado por Mesa en IP ${leaderIp}`, '#f0b429');
+    } else if (currentUserRole === 'leader') {
+        setStatus('⭐ Líder de Mesa (Modo Control Activo)', '#eab308');
+    } else if (currentUserRole === 'teacher') {
+        setStatus('🎓 Docente (Modo Administrador)', '#38bdf8');
+    } else {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            setStatus('Conectado', '#14f0c5');
+        } else {
+            setStatus('Desconectado', '#ff4d6a');
+        }
+    }
+}
+
+function showNotification(message, color = '#14f0c5') {
+    let container = $('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999;pointer-events:none;max-width:320px;';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'glass-card';
+    toast.style.cssText = `
+        background: rgba(30, 41, 59, 0.95);
+        color: #fff;
+        padding: 12px 18px;
+        border-radius: 12px;
+        border-left: 4px solid ${color};
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 15px ${color}33;
+        font-size: 13px;
+        font-weight: 500;
+        pointer-events: auto;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        backdrop-filter: blur(8px);
+    `;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// ─── DYNAMIC HARDWARE DIAGRAM, DIRECT PIN TOOLTIPS, AND CAPTIVE PORTAL ONBOARDING ───
+
+function updateSidebarDiagram() {
+    const leftCol = document.querySelector('.pins-col.pins-left');
+    const rightCol = document.querySelector('.pins-col.pins-right');
+    if (!leftCol || !rightCol || !activeHardwareProfile.pins) return;
+
+    const p = activeHardwareProfile.pins;
+
+    leftCol.innerHTML = `
+        <div class="p-node i2c" data-gpio="${p.tof_sda}"><span class="pin-num">${p.tof_sda}</span> TOF-SDA</div>
+        <div class="p-node i2c" data-gpio="${p.tof_scl}"><span class="pin-num">${p.tof_scl}</span> TOF-SCL</div>
+        <div class="p-node serial" data-gpio="${p.hx_dt}"><span class="pin-num">${p.hx_dt}</span> HX-DT</div>
+        <div class="p-node serial" data-gpio="${p.hx_sck}"><span class="pin-num">${p.hx_sck}</span> HX-SCK</div>
+    `;
+
+    rightCol.innerHTML = `
+        <div class="p-node i2c" data-gpio="${p.enc_sda}"><span class="pin-num">${p.enc_sda}</span> ENC-SDA</div>
+        <div class="p-node i2c" data-gpio="${p.enc_scl}"><span class="pin-num">${p.enc_scl}</span> ENC-SCL</div>
+        <div class="p-node led" data-gpio="48"><span class="pin-num">48</span> WS2812</div>
+        <div class="p-node boot-pin" data-gpio="0"><span class="pin-num">0</span> BOOT</div>
+    `;
+}
+
+let currentGvTooltip = null;
+
+function showPinConfigTooltip(gpioNum, targetEl) {
+    if (currentGvTooltip) {
+        currentGvTooltip.remove();
+        currentGvTooltip = null;
+    }
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    const isBlocked = blockedPins.includes(gpioNum);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'gv-tooltip glass-card';
+    
+    // Position tooltip near targetEl
+    const rect = targetEl.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
+    if (rect.left > window.innerWidth / 2) {
+        tooltip.style.left = (rect.left + scrollLeft - 190) + 'px';
+    } else {
+        tooltip.style.left = (rect.right + scrollLeft + 10) + 'px';
+    }
+    tooltip.style.top = (rect.top + scrollTop) + 'px';
+
+    const titleColor = isBlocked ? '#f87171' : '#38bdf8';
+    const warningMsg = isBlocked ? `<div style="font-size:0.6rem; color:#f87171; text-align:center; margin-bottom:8px; line-height:1.2;">⚠️ Reservado por Cámara</div>` : '';
+
+    tooltip.innerHTML = `
+        <div class="gv-tooltip-header" style="color: ${titleColor};">📌 Configurar GPIO ${gpioNum}</div>
+        ${warningMsg}
+        <div class="gv-tooltip-options">
+            <button onclick="assignPinTo(${gpioNum}, 'pin-tof-sda')">ToF SDA</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-tof-scl')">ToF SCL</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-enc-sda')">Encoder SDA</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-enc-scl')">Encoder SCL</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-hx-dt')">HX711 DT</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-hx-sck')">HX711 SCK</button>
+            <button class="btn-danger" style="margin-top:4px;" onclick="assignPinTo(${gpioNum}, 'release')">Liberar Pin</button>
+        </div>
+    `;
+
+    document.body.appendChild(tooltip);
+    currentGvTooltip = tooltip;
+
+    // Close tooltip on click outside
+    setTimeout(() => {
+        const closeHandler = (e) => {
+            if (tooltip && !tooltip.contains(e.target) && e.target !== targetEl && !targetEl.contains(e.target)) {
+                tooltip.remove();
+                if (currentGvTooltip === tooltip) currentGvTooltip = null;
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('click', closeHandler);
+    }, 10);
+}
+
+function assignPinTo(gpioNum, targetSelectId) {
+    if (currentGvTooltip) {
+        currentGvTooltip.remove();
+        currentGvTooltip = null;
+    }
+
+    if (targetSelectId === 'release') {
+        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+        let freed = false;
+        selectors.forEach(id => {
+            const el = $(id);
+            if (el && parseInt(el.value) === gpioNum) {
+                const currentlyAssigned = selectors.map(s => parseInt($(s)?.value || -1));
+                const freePin = SAFE_PINS.find(p => !currentlyAssigned.includes(p));
+                if (freePin !== undefined) {
+                    el.value = freePin;
+                    freed = true;
+                    showNotification(`📌 GPIO ${gpioNum} liberado. Sensor reasignado a GPIO ${freePin}.`, '#eab308');
+                }
+            }
+        });
+        if (!freed) {
+            showNotification(`ℹ️ GPIO ${gpioNum} no estaba asignado a ningún sensor.`, '#94a3b8');
+        }
+        return;
+    }
+
+    const selectEl = $(targetSelectId);
+    if (!selectEl) return;
+
+    const isCamera = activeHardwareProfile.camera_detected;
+    const cameraType = activeHardwareProfile.type;
+    const freenoveCamPins = [4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 39, 40, 41, 42];
+    const standardCamPins = [17, 18];
+    const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
+    
+    if (blockedPins.includes(gpioNum)) {
+        if (!confirm(`⚠️ Advertencia de Conflicto de Cámara:\n\nEl GPIO ${gpioNum} está reservado para la cámara.\nSi continúas asignándolo a este sensor, podrías provocar inestabilidad.\n\n¿Estás seguro de que deseas asignarlo?`)) {
+            return;
+        }
+    }
+
+    const profileSelect = $('pin-profile-select');
+    if (profileSelect && profileSelect.value !== 'custom') {
+        profileSelect.value = 'custom';
+        applyPinProfilePreset('custom');
+    }
+
+    selectEl.value = gpioNum;
+
+    selectEl.style.transition = 'all 0.3s ease';
+    selectEl.style.borderColor = '#eab308';
+    selectEl.style.boxShadow = '0 0 10px rgba(234, 179, 8, 0.4)';
+    setTimeout(() => {
+        selectEl.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        selectEl.style.boxShadow = 'none';
+    }, 1500);
+
+    const nameMap = {
+        'pin-tof-sda': 'ToF SDA',
+        'pin-tof-scl': 'ToF SCL',
+        'pin-enc-sda': 'Encoder SDA',
+        'pin-enc-scl': 'Encoder SCL',
+        'pin-hx-dt': 'HX711 DT',
+        'pin-hx-sck': 'HX711 SCK'
+    };
+
+    showNotification(`📌 GPIO ${gpioNum} asignado a ${nameMap[targetSelectId]}! Recuerda hacer clic en "💾 Guardar y Reiniciar ESP32" para aplicar los cambios.`, '#eab308');
+}
+
+function showCaptivePortalOverlay() {
+    let overlay = $('captive-portal-overlay');
+    if (overlay) return;
+
+    overlay = document.createElement('div');
+    overlay.id = 'captive-portal-overlay';
+    overlay.className = 'captive-portal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(10, 14, 26, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+        font-family: inherit;
+        color: #f3f4f6;
+    `;
+
+    const card = document.createElement('div');
+    card.className = 'glass-card';
+    card.style.cssText = `
+        max-width: 480px;
+        width: 100%;
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        background: rgba(15, 23, 42, 0.6);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+        text-align: center;
+    `;
+
+    card.innerHTML = `
+        <div style="font-size: 3rem; margin-bottom: 15px; animation: pulse 2s infinite;">📶</div>
+        <h2 style="margin: 0 0 10px 0; color: #38bdf8; font-size: 1.5rem; font-weight: 800;">Portal Cautivo Detectado</h2>
+        <p style="font-size: 0.88rem; color: #94a3b8; line-height: 1.5; margin-bottom: 24px;">
+            Estás usando el navegador limitado de tu sistema operativo. Para evitar que el celular te <strong>desconecte automáticamente</strong> y poder descargar tus datos:
+        </p>
+        <div style="text-align: left; background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem; line-height: 1.6;">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>
+                <span>Pulsa los <strong>tres puntos (⋮)</strong> arriba a la derecha (o <strong>Cancelar</strong> / <strong>Listo</strong> en iPhone).</span>
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>
+                <span>Selecciona <strong>"Mantener conexión sin internet"</strong> o <strong>"Usar esta red tal como está"</strong>.</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <span style="background: #38bdf8; color: #0a0e1a; font-weight: bold; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">3</span>
+                <span>Abre <strong>Chrome o Safari</strong> e ingresa a:<br><strong style="color: #eab308; font-size: 1rem; font-family: monospace; display: block; margin-top: 4px; text-align: center; background: rgba(234, 179, 8, 0.1); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.2);">http://192.168.4.1</strong></span>
+            </div>
+        </div>
+        <button id="btn-cp-continue" class="btn-action btn-gold" style="width: 100%; font-weight: bold; padding: 12px; border-radius: 10px; font-size: 0.9rem;">
+            Continuar en Portal Cautivo anyway
+        </button>
+    `;
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    $('btn-cp-continue').addEventListener('click', () => {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s ease-out';
+        setTimeout(() => overlay.remove(), 300);
+    });
+}
+

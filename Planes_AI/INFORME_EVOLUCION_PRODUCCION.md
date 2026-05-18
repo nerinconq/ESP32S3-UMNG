@@ -95,6 +95,27 @@ La carpeta `produccion/` ha sido sincronizada con el estado actual del desarroll
 
 ---
 
+## 🔄 Actualización: v9.3 — Resurrección de ESP32-S3-CAM y Ensayo de Cámara Exitoso
+
+**Fecha:** 2026-05-18 00:10 COT (Aprox.)
+**Cambios de Configuración:** `platformio.ini` (entorno `esp32s3cam` corregido a `qio_opi`)
+
+### Avances Obtenidos
+1. **Resolución de Boot-Loop Crítico (Descubrimiento Clave)**:
+   - Se identificó y resolvió el error de arranque `cpu_start: Octal Flash option selected, but EFUSE not configured!` en la placa ESP32-S3-CAM WROOM-1 N16R8.
+   - **Causa raíz**: El entorno `esp32s3cam` estaba configurado incorrectamente con `opi_opi` (Octal Flash). Este procesador tiene flash de 16MB Quad SPI (`qio`) y 8MB Octal PSRAM (`opi`).
+   - **Solución implementada**: Se corrigió el `platformio.ini` a `qio_opi` en la flash, eliminando el fallo físico y permitiendo al chip arrancar limpiamente.
+
+2. **Ensayo de Cámara en Tiempo Real (100% Exitoso)**:
+   - Se diseñó un script de prueba interactivo (`scratch/main_cam_test_freenove.cpp`) que levanta un AP WiFi abierto (`Physys-CamTest`) y realiza **autodetección inteligente** entre dos perfiles de pines de cámara (Freenove `ESP32S3_EYE` y Estándar AI-Thinker).
+   - **Resultado**: La cámara OV2640 fue detectada con éxito bajo el pinout **Freenove**. Nelson capturó video en tiempo real e imágenes estáticas servidas en RAM de forma impecable.
+   - El código se respaldó de forma permanente para el laboratorio.
+
+3. **Restauración al Proyecto Principal**:
+   - `src/main.cpp` fue retornado a su estado de producción de la versión `v9.2` intacta, manteniendo la corrección de PSRAM en el entorno base y la integridad del software principal.
+
+---
+
 > [!TIP]
 > **Respaldo Seguro:** La carpeta `produccion/` ahora sirve como un snapshot perfecto para despliegues en campo. Se recomienda no modificarla hasta el próximo hito validado.
 
