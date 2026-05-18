@@ -34,6 +34,7 @@ timeline
 - [x] **Autodetección de Cámara:** Escaneo automático del bus SCCB en la dirección `0x30` para detectar dinámicamente si la placa es tipo CAM y aplicar restricciones de pines de manera proactiva.
 
 ### ⚡ 3. Robustez y Estabilidad Operativa (Bypass de Bloqueos)
+- [x] **Diagnóstico y Auditoría de Boot Loop v9.3:** Registro técnico de lecciones aprendidas y reglas de seguridad de hardware documentado en [PLAN_SOLUCION_V9.3_BOOTLOOP.md](file:///c:/Users/nelso/Documents/A_UMNG/ESP32S3%20PHYSYS%20LAB/Planes_AI/PLAN_SOLUCION_V9.3_BOOTLOOP.md).
 - [x] **Timeouts en Canales I2C:** Añadido `setTimeOut(100)` a los buses `I2C_TOF` e `I2C_ENC` para evitar congelamiento de la placa si los sensores se desconectan.
 - [x] **Bypass de Heap Corruption en Servidor Web:** Pre-compresión de archivos estáticos (`index.html.gz`, `app.js.gz`, `styles.css.gz`, `manual.html.gz`, `firebase-sync.js.gz`). Reduce un 80% el consumo de buffer RAM de red, acelerando la carga 10 veces.
 - [x] **Bypass de Portal Cautivo Android:** Servido de datos locales de Desmos (`.desmos`) mediante descarga temporal RAM/HTTP (`POST /api/temp-export` -> `GET /api/download-export`), esquivando los bloqueos nativos del navegador móvil offline.
