@@ -510,7 +510,7 @@
                     </div>
 
                     <div class="sim-input-box" id="auth-box">
-                        <input type="password" class="sim-input" id="auth-pin" placeholder="Ingresar PIN (Líder: 1234, Docente: 0000)">
+                        <input type="password" class="sim-input" id="auth-pin" placeholder="Ingresar PIN (Líder: 1234, Docente: Umng-2026)">
                         <button class="sim-btn" id="btn-auth" onclick="tryAuth()">Autorizar</button>
                     </div>
                 </div>
@@ -646,7 +646,7 @@
                 simulateRole('leader');
                 alert('¡Autorizado con éxito como LÍDER DE MESA!');
                 input.value = '';
-            } else if (pin === '0000') {
+            } else if (pin === 'Umng-2026') {
                 simulateRole('admin');
                 alert('¡Autorizado con éxito como DOCENTE / ADMINISTRADOR!');
                 input.value = '';

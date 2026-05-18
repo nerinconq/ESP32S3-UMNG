@@ -678,7 +678,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     }
     else if (msg.startsWith("SET_PINS:")) {
       String clientIp = client->remoteIP().toString();
-      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // SOLO LÍDER O DOCENTE
+      if (currentTeacherIp != clientIp) return; // SOLO DOCENTE (Líder NO puede reasignar pines de hardware)
       
       String payload = msg.substring(9);
       // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck
@@ -729,7 +729,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         } else {
           client->text("{\"auth\":\"student\",\"status\":\"busy\",\"ip\":\"" + currentLeaderIp + "\"}");
         }
-      } else if (pin == "0000") { // Teacher
+      } else if (pin == "Umng-2026") { // Teacher
         currentTeacherIp = clientIp;
         client->text("{\"auth\":\"teacher\",\"status\":\"success\"}");
         Serial.printf("[AUTH] Docente activo en IP: %s\n", clientIp.c_str());

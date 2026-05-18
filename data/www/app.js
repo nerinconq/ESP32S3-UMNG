@@ -2275,8 +2275,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const pinEl = e.target.closest('.gv-pin');
             if (!pinEl) return;
 
-            if (currentUserRole !== 'teacher' && currentUserRole !== 'leader') {
-                showNotification('🔒 Solo el Líder de Mesa o el Docente pueden configurar los pines de forma interactiva.', '#ff4d6a');
+            if (currentUserRole !== 'teacher') {
+                showNotification('🔒 Solo el Docente puede configurar los pines de forma interactiva.', '#ff4d6a');
                 return;
             }
 
@@ -2359,7 +2359,7 @@ function syncRoleUI() {
     document.body.classList.add('role-' + currentUserRole);
 
     // Disable/enable pin profile selections according to the role and preset state
-    const canEditPins = (currentUserRole === 'teacher' || currentUserRole === 'leader');
+    const canEditPins = (currentUserRole === 'teacher');
     const profileSelect = $('pin-profile-select');
     if (profileSelect) {
         profileSelect.disabled = !canEditPins;
@@ -2373,7 +2373,18 @@ function syncRoleUI() {
         }
     });
 
-    // Toggle teacher/leader settings panel
+    // Disable/enable general configuration inputs (Students can only view)
+    const canEditConfig = (currentUserRole === 'teacher' || currentUserRole === 'leader');
+    const configInputs = [
+        'tof_model', 'tof_range', 'sample_rate', 'tube_length',
+        'invert-encoder-check', 'config-hx-filter-check', 'config-hx-stability-check'
+    ];
+    configInputs.forEach(id => {
+        const el = $(id);
+        if (el) el.disabled = !canEditConfig;
+    });
+
+    // Toggle teacher settings panel (only for Docente)
     const teacherSettings = $('gv-teacher-settings');
     if (teacherSettings) {
         teacherSettings.style.display = canEditPins ? 'block' : 'none';
@@ -2568,8 +2579,8 @@ function populatePinSelectors() {
 }
 
 function applyCustomPins() {
-    if (currentUserRole !== 'teacher' && currentUserRole !== 'leader') {
-        showNotification('⚠️ Solo un Líder de Mesa o Docente puede cambiar los pines de hardware.', '#ff4d6a');
+    if (currentUserRole !== 'teacher') {
+        showNotification('⚠️ Solo el Docente puede cambiar los pines de hardware.', '#ff4d6a');
         return;
     }
 
