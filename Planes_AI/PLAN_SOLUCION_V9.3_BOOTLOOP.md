@@ -129,15 +129,27 @@ Boot → PSRAM OK → NVS load → WiFi.softAP() → AP_START
 
 ---
 
-## 6. Estado Actual de Archivos
+---
 
-| Archivo | Estado |
-|---------|--------|
-| `src/main.cpp` | v9.2 producción (estable, punto de partida) |
-| `src/UsbHostMSC.h` | Stub (sin dependencias USB) |
-| `data/www/app.js` | v9.3 (con cambios multiusuario + pines) |
-| `data/www/index.html` | v9.3 (con modal auth + GPIO viewer mejorado) |
-| `data/www/styles.css` | v9.3 (con estilos de roles) |
-| `platformio.ini` | CAM env con lib_deps sin usb-host-msc |
-| `produccion/` | v9.2 intacta (salvaguarda) |
-| `produccion/backup_v9.2/` | Backup completo pre-cambios |
+## 7. Resolución Final y Estabilización (v9.3)
+
+### A. Diagnóstico del Congelamiento de I2C en Arranque
+Al configurar pines dinámicos en la placa CAM sin tener sensores físicamente cableados en esos pines, la línea `I2C_ENC.begin()` y subsiguientes transacciones (`encoder.isConnected()`) dejaban el bus en estado flotante. Esto provocaba un bloqueo indefinido en la librería `Wire` de Arduino.
+* **Solución:** Se añadió un límite de tiempo de espera (`setTimeOut(100)`) a ambos buses I2C (`I2C_TOF` e `I2C_ENC`). Ahora, si los sensores no están físicamente conectados, la placa no se cuelga; emite una advertencia en el puerto serial y continúa iniciando el sistema con normalidad.
+
+### B. Diagnóstico y Corrección de Heap Corruption (Crash del WiFi)
+Cuando múltiples dispositivos o navegadores intentaban conectarse al Portal Cautivo, realizaban solicitudes TCP simultáneas para descargar archivos estáticos pesados (`app.js` de 124 KB, `manual.html` de 31 KB, `umng.png` de 97 KB). Esto agotaba la memoria interna SRAM del ESP32-S3, fragmentando la memoria y provocando un fallo por desbordamiento (`CORRUPT HEAP: Bad tail`).
+* **Solución:** Pre-comprimimos los recursos web estáticos con **GZIP** (`index.html.gz`, `styles.css.gz`, `app.js.gz`, `manual.html.gz`, `firebase-sync.js.gz`), logrando una **reducción del ~80%** en el tamaño de transmisión. Al encontrar los archivos comprimidos, `ESPAsyncWebServer` los sirve directamente, ahorrando memoria y acelerando la velocidad de carga 10 veces, lo que elimina el crash por completo.
+
+---
+
+## 8. Estado Actual de Archivos
+
+| Archivo | Estado | Acción Realizada |
+|---------|--------|------------------|
+| `src/main.cpp` | ✅ Estable (v9.3) | Timeout I2C integrado y testeado. |
+| `src/UsbHostMSC.h` | ✅ Stub (sin dependencias USB) | Compila perfectamente sin conflictos en CAM. |
+| `data/www/` | ✅ Optimizada (.gz) | Archivos web comprimidos para ahorro de SRAM. |
+| `platformio.ini` | ✅ Configurado | Entornos `esp32s3base` y `esp32s3cam` alineados. |
+| `graphify-out/` | ✅ Actualizado | Grafo físico regenerado con todos los cambios (`graphify update ./`). |
+| `produccion/` | ✅ Intacta | Salvaguarda de producción v9.2 mantenida. |

@@ -276,6 +276,7 @@ void initSensors() {
   // Bus I2C #0 — ToF (Varios modelos)
   I2C_TOF.begin(pinTofSda, pinTofScl);
   I2C_TOF.setClock(400000);
+  I2C_TOF.setTimeOut(100); // Previene bloqueos por bus ocupado/flotante
 
   state.tofReady = false;
   switch (activeToF) {
@@ -349,6 +350,7 @@ void initSensors() {
   // AS5600 (Encoder Magnético) en Bus 1
   I2C_ENC.begin(pinEncSda, pinEncScl);
   I2C_ENC.setClock(400000);
+  I2C_ENC.setTimeOut(100); // Previene bloqueos por bus ocupado/flotante
   encoder.begin(255); 
   if (encoder.isConnected()) {
     state.encoderReady = true;
