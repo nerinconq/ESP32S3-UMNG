@@ -235,7 +235,7 @@
                                     <label class="switch"><input type="checkbox" id="invert-encoder-check" onchange="toggleInvertEncoder()"><span class="slider round"></span></label>
                                     <span>Invertir sentido de giro</span>
                                 </div>
-                                <button class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
+                                <button id="btn-config-reset-enc" class="btn-action" style="width:100%;margin-top:10px;background:#6366f1;border-color:#6366f1;color:#fff" onclick="resetEncoder()">🔄 Poner a Cero</button>
                             </div>
 
                             <!-- SECCIÓN 3: FUERZA -->
@@ -253,7 +253,7 @@
                                     <label class="switch"><input type="checkbox" id="config-hx-stability-check" onchange="toggleHxStability()"><span class="slider round"></span></label>
                                     <span>Estabilidad Alta (16-bit)</span>
                                 </div>
-                                <button class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
+                                <button id="btn-config-tare" class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
                             </div>
 
                             <!-- ACCIONES DE SISTEMA -->

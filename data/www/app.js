@@ -2301,11 +2301,12 @@ document.addEventListener('DOMContentLoaded', () => {
 const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47];
 
 function syncRoleUI() {
-    const isLocked = (currentUserRole === 'student' && isLeaderActive);
+    const isLocked = (currentUserRole === 'student');
     const writeButtons = [
         'btn-record', 'btn-sensor-rec', 'btn-sensor-tare', 'btn-sensor-invert',
-        'btn-sensor-reset-enc', 'btn-trigger', 'btn-clear-esp', 'btn-save-config',
-        'btn-reboot', 'btn-save-script', 'btn-load-script'
+        'btn-sensor-reset-enc', 'btn-trigger', 'btn-trigger-stop', 'btn-clear-esp', 
+        'btn-save-config', 'btn-reboot', 'btn-save-script', 'btn-load-script',
+        'btn-config-reset-enc', 'btn-config-tare'
     ];
     
     writeButtons.forEach(id => {
@@ -2331,7 +2332,11 @@ function syncRoleUI() {
             if (btn) {
                 e.preventDefault();
                 e.stopPropagation();
-                showNotification(`⚠️ Control bloqueado. Mesa bajo control del Líder activo en IP ${leaderIp}.`, '#ff4d6a');
+                if (isLeaderActive) {
+                    showNotification(`⚠️ Control bloqueado. Mesa bajo control del Líder activo en IP ${leaderIp}.`, '#ff4d6a');
+                } else {
+                    showNotification(`🔒 Acción bloqueada. Solo un Líder de Mesa o el Docente pueden realizar esta acción.`, '#ff4d6a');
+                }
             }
         }, true);
         window.hasRoleCapturingListener = true;
@@ -2377,7 +2382,8 @@ function syncRoleUI() {
     const canEditConfig = (currentUserRole === 'teacher' || currentUserRole === 'leader');
     const configInputs = [
         'tof_model', 'tof_range', 'sample_rate', 'tube_length',
-        'invert-encoder-check', 'config-hx-filter-check', 'config-hx-stability-check'
+        'invert-encoder-check', 'config-hx-filter-check', 'config-hx-stability-check',
+        'hx-filter-check', 'hx-stability-check', 'auto-stop-dist'
     ];
     configInputs.forEach(id => {
         const el = $(id);
