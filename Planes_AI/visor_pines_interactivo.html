@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Pines Interactivo — Physys Lab UMNG</title>
+    <!-- Carga de Google Fonts y Lucide Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0a0c10;
+            --bg-surface: rgba(18, 22, 30, 0.7);
+            --bg-surface-solid: #12161e;
+            --border-glow: rgba(0, 240, 255, 0.15);
+            --text-main: #f0f4f8;
+            --text-muted: #8a99ad;
+            
+            /* Curated Harmoneous HSL Colors */
+            --color-tof: #00f0ff;      /* Cyan */
+            --color-enc: #00ff66;      /* Esmeralda */
+            --color-hx: #ffcc00;       /* Amarillo */
+            --color-cam: #ff6600;      /* Naranja */
+            --color-psram: #9900ff;    /* Violeta */
+            --color-sd: #ff007f;       /* Magenta */
+            --color-usb: #3b82f6;      /* Azul Eléctrico */
+            --color-uart: #6b7280;     /* Gris */
+            --color-strap: #f59e0b;    /* Dorado */
+            --color-gpio: #10b981;     /* Verde Libre */
+            --color-boot: #ef4444;     /* Rojo BOOT */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(153, 0, 255, 0.05) 0%, transparent 40%);
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            background: rgba(10, 12, 16, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #00f0ff, #9900ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-title p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .badge-version {
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            color: var(--color-tof);
+            padding: 0.25rem 0.6rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 320px 1fr 340px;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Paneles con Glassmorphism */
+        .glass-panel {
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: all 0.3rem ease;
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(0, 240, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 240, 255, 0.03);
+        }
+
+        .panel-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Control de Perfiles */
+        .profile-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 0.8rem 1rem;
+            color: var(--text-main);
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .profile-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .profile-btn.active {
+            background: rgba(0, 240, 255, 0.08);
+            border-color: var(--color-tof);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+        }
+
+        .profile-btn.active.profile-cam {
+            background: rgba(255, 102, 0, 0.08);
+            border-color: var(--color-cam);
+            box-shadow: 0 0 15px rgba(255, 102, 0, 0.1);
+        }
+
+        .profile-btn span.name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .profile-btn span.desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Leyenda de Colores */
+        .legend-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.3rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .legend-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: #fff;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        /* Render del Chip ESP32-S3 */
+        .chip-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 1000px;
+            padding: 2rem;
+        }
+
+        .esp32-board {
+            background: #181c26;
+            border: 2px solid #2a3142;
+            border-radius: 12px;
+            width: 480px;
+            padding: 2.5rem 1rem 1.5rem 1rem;
+            position: relative;
+            box-shadow: 
+                0 20px 50px rgba(0,0,0,0.5),
+                inset 0 0 20px rgba(255,255,255,0.02);
+            display: flex;
+            justify-content: space-between;
+            transition: transform 0.5s ease;
+        }
+
+        /* Placa base estilo PCB */
+        .esp32-board::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 60px;
+            background: #0f121a;
+            border: 1px solid #1f2535;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .esp32-board::after {
+            content: 'ESP32-S3 WROOM-1';
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #4a5568;
+            font-size: 0.65rem;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        /* Filas de Pines Izquierda y Derecha */
+        .pin-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            width: 45%;
+        }
+
+        .pin-column.right {
+            align-items: flex-end;
+        }
+
+        /* Pin Físico */
+        .phys-pin {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 0.35rem 0.6rem;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .pin-column.right .phys-pin {
+            flex-direction: row-reverse;
+        }
+
+        .phys-pin:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        }
+
+        .phys-pin .num {
+            font-weight: 700;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+        }
+
+        .phys-pin .label {
+            font-weight: 500;
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Estilos Dinámicos de Funciones Activas */
+        .phys-pin.active-tof { border-color: var(--color-tof); color: #fff; box-shadow: inset 0 0 6px rgba(0, 240, 255, 0.2), 0 0 8px rgba(0, 240, 255, 0.1); }
+        .phys-pin.active-tof .num { color: var(--color-tof); }
+
+        .phys-pin.active-enc { border-color: var(--color-enc); color: #fff; box-shadow: inset 0 0 6px rgba(0, 255, 102, 0.2), 0 0 8px rgba(0, 255, 102, 0.1); }
+        .phys-pin.active-enc .num { color: var(--color-enc); }
+
+        .phys-pin.active-hx { border-color: var(--color-hx); color: #fff; box-shadow: inset 0 0 6px rgba(255, 204, 0, 0.2), 0 0 8px rgba(255, 204, 0, 0.1); }
+        .phys-pin.active-hx .num { color: var(--color-hx); }
+
+        .phys-pin.active-cam { border-color: var(--color-cam); color: #fff; box-shadow: inset 0 0 6px rgba(255, 102, 0, 0.2), 0 0 8px rgba(255, 102, 0, 0.1); }
+        .phys-pin.active-cam .num { color: var(--color-cam); }
+
+        .phys-pin.active-psram { border-color: var(--color-psram); color: #fff; box-shadow: inset 0 0 6px rgba(153, 0, 255, 0.2), 0 0 8px rgba(153, 0, 255, 0.1); }
+        .phys-pin.active-psram .num { color: var(--color-psram); }
+
+        .phys-pin.active-sd { border-color: var(--color-sd); color: #fff; box-shadow: inset 0 0 6px rgba(255, 0, 127, 0.2), 0 0 8px rgba(255, 0, 127, 0.1); }
+        .phys-pin.active-sd .num { color: var(--color-sd); }
+
+        .phys-pin.active-usb { border-color: var(--color-usb); color: #fff; box-shadow: inset 0 0 6px rgba(59, 130, 246, 0.2), 0 0 8px rgba(59, 130, 246, 0.1); }
+        .phys-pin.active-usb .num { color: var(--color-usb); }
+
+        .phys-pin.active-uart { border-color: var(--color-uart); color: #fff; }
+        .phys-pin.active-uart .num { color: var(--color-uart); }
+
+        .phys-pin.active-strap { border-color: var(--color-strap); color: #fff; box-shadow: inset 0 0 6px rgba(245, 158, 11, 0.2), 0 0 8px rgba(245, 158, 11, 0.1); }
+        .phys-pin.active-strap .num { color: var(--color-strap); }
+
+        /* Panel de Detalle Derecho */
+        .detail-panel {
+            gap: 1.5rem;
+        }
+
+        .detail-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .detail-card .header-detail {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detail-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            color: #fff;
+        }
+
+        .pin-status-badge {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            padding: 0.4rem 0;
+        }
+
+        .detail-row span.label {
+            color: var(--text-muted);
+        }
+
+        .detail-row span.value {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .warning-box {
+            background: rgba(239, 68, 68, 0.06);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            padding: 0.8rem;
+            font-size: 0.75rem;
+            color: #fca5a5;
+            line-height: 1.35;
+        }
+
+        .warning-box strong {
+            color: #ef4444;
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        /* Alertas Informativas */
+        .info-card {
+            background: rgba(59, 130, 246, 0.06);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 10px;
+            padding: 1rem;
+            font-size: 0.8rem;
+            color: #93c5fd;
+            line-height: 1.4;
+        }
+
+        .info-card strong {
+            color: var(--color-usb);
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+
+        /* Footer */
+        footer {
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: auto;
+        }
+
+        /* Animación de entrada de pines */
+        @keyframes pinPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); box-shadow: 0 0 15px currentColor; }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pinPulse 1.5s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <h1>🔬 Visor de Hardware Interactivo</h1>
+            <p>Physys Lab UMNG — Diseñado para el control seguro de pines en caliente</p>
+        </div>
+        <div>
+            <span class="badge-version">Placa Adaptativa v9.5</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- PANEL IZQUIERDO: CONTROLES Y LEYENDAS -->
+        <section class="glass-panel">
+            <div class="panel-title">
+                <span>🎮</span> Configuración del Sistema
+            </div>
+            
+            <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                Selecciona la placa activa para visualizar la distribución física de buses y evitar colisiones destructivas por hardware:
+            </p>
+
+            <button class="profile-btn active" id="btn-base" onclick="setProfile('base')">
+                <span class="name">ESP32-S3 DevKit (Base)</span>
+                <span class="desc">Uso de I2C en 4/5 y Encoder en 10/11. ToF activo.</span>
+            </button>
+
+            <button class="profile-btn profile-cam" id="btn-cam" onclick="setProfile('cam')">
+                <span class="name">ESP32-S3 Cam (Cámara)</span>
+                <span class="desc">Buses redirigidos para evitar la cámara OV2640 y PSRAM.</span>
+            </button>
+
+            <div class="panel-title" style="margin-top: 1rem;">
+                <span>🏷️</span> Mapa de Interfaces
+            </div>
+
+            <div class="legend-list">
+                <div class="legend-item" onclick="highlightCategory('tof')">
+                    <span class="legend-color" style="background-color: var(--color-tof)"></span>
+                    <span>ToF Distance Sensor (I2C)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('enc')">
+                    <span class="legend-color" style="background-color: var(--color-enc)"></span>
+                    <span>Magnetic Encoder (I2C)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('hx')">
+                    <span class="legend-color" style="background-color: var(--color-hx)"></span>
+                    <span>HX711 Load Cell (Bridge)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('cam')">
+                    <span class="legend-color" style="background-color: var(--color-cam)"></span>
+                    <span>Cámara OV2640 Bus (Activo en Cam)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('psram')">
+                    <span class="legend-color" style="background-color: var(--color-psram)"></span>
+                    <span>PSRAM Octal (Bus N16R8)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('sd')">
+                    <span class="legend-color" style="background-color: var(--color-sd)"></span>
+                    <span>Tarjeta SD / SDMMC Slot</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('usb')">
+                    <span class="legend-color" style="background-color: var(--color-usb)"></span>
+                    <span>USB OTG Nativo (OTG D-/D+)</span>
+                </div>
+                <div class="legend-item" onclick="highlightCategory('strap')">
+                    <span class="legend-color" style="background-color: var(--color-strap)"></span>
+                    <span>Pines Strapping (Boot Config)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- PANEL CENTRAL: RENDER DEL CHIP FÍSICO -->
+        <section class="chip-container">
+            <div class="esp32-board" id="board">
+                <!-- Columna Izquierda (22 pines) -->
+                <div class="pin-column left" id="pins-left">
+                    <!-- Dinámico -->
+                </div>
+
+                <!-- Columna Derecha (22 pines) -->
+                <div class="pin-column right" id="pins-right">
+                    <!-- Dinámico -->
+                </div>
+            </div>
+        </section>
+
+        <!-- PANEL DERECHO: DETALLES EN VIVO -->
+        <section class="glass-panel detail-panel">
+            <div class="panel-title">
+                <span>🔍</span> Inspector de Pines
+            </div>
+
+            <div class="detail-card" id="detail-card">
+                <div class="header-detail">
+                    <h3 id="det-name">Selecciona un Pin</h3>
+                    <span class="pin-status-badge" id="det-status" style="background: rgba(255,255,255,0.05);">--</span>
+                </div>
+                <p id="det-desc" style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; min-height: 40px;">
+                    Pasa el cursor por encima de cualquier pin de la tarjeta ESP32-S3 para inspeccionar su conexión física, asignación de software, restricciones de diseño y advertencias del fabricante.
+                </p>
+                
+                <div class="detail-row">
+                    <span class="label">GPIO Físico</span>
+                    <span class="value" id="det-gpio">--</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Función Activa</span>
+                    <span class="value" id="det-fn">--</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Tipo de Señal</span>
+                    <span class="value" id="det-sig">--</span>
+                </div>
+                <div class="detail-row" id="row-danger" style="display: none;">
+                    <span class="label" style="color: #ef4444;">Peligro</span>
+                    <span class="value" style="color: #ef4444;" id="det-danger">PSRAM OCTAL</span>
+                </div>
+            </div>
+
+            <div class="warning-box" id="warning-box">
+                <strong>💡 Regla de PSRAM Failsafe:</strong>
+                Los GPIOs 35, 36 y 37 se encuentran conectados internamente al bus de PSRAM Octal OPI en módulos N16R8. En ambos perfiles de firmware, la API omite su lectura digital física para salvaguardar la estabilidad.
+            </div>
+
+            <div class="info-card">
+                <strong>📝 Nota de Strapping:</strong>
+                El pin GPIO 0 actúa como detector de modo de programación (BOOT). Al arrancar, si es detectado en nivel LOW, el ESP32-S3 entra en modo de flasheo por ROM Serial UART.
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        Universidad Militar Nueva Granada • Departamento de Física y Geociencias • Profesor Nelson Rincón
+    </footer>
+
+    <script>
+        // Mapeo Físico Izquierda y Derecha de la placa ESP32-S3 DevKit
+        const leftPinsOrder = [3, 46, 9, 10, 11, 12, 13, 14, 21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2];
+        const rightPinsOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 19, 20, 26, 43, 44, 1, 33, 34]; // Faltantes a la derecha
+
+        // Base de datos de Pines por Perfil
+        let currentProfile = 'base';
+        
+        const pinDatabase = {
+            base: {
+                0:  { l: "BOOT/0", f: "strap", d: "Pin BOOT del chip. Conectado al botón físico BOOT con resistencia pull-up externa.", s: "Digital Input / Strapping" },
+                1:  { l: "1", f: "gpio", d: "GPIO libre. Disponible para entradas o salidas analógicas/digitales.", s: "GPIO Libre" },
+                2:  { l: "LED_ON/2", f: "strap", d: "LED integrado en placa. Actúa también como pin de strapping para inicialización. Usarlo para I2C deforma los flancos por su carga resistiva.", s: "Digital Output / Strapping" },
+                3:  { l: "3", f: "strap", d: "Pin de strapping (JTAG control). Libre para uso digital general posterior al arranque.", s: "GPIO / Strapping" },
+                4:  { l: "TOF_SDA", f: "tof", d: "Canal de Datos I2C asignado para el sensor de distancia ToF VL53L0X/VL53L1X.", s: "I2C SDA" },
+                5:  { l: "TOF_SCL", f: "tof", d: "Canal de Reloj I2C asignado para el sensor de distancia ToF VL53L0X/VL53L1X.", s: "I2C SCL" },
+                6:  { l: "HX_DT", f: "hx", d: "Línea de datos serie digital proveniente de la celda de carga HX711.", s: "Digital Input" },
+                7:  { l: "HX_SCK", f: "hx", d: "Línea de reloj de sincronización para el conversor HX711.", s: "Digital Output" },
+                8:  { l: "8", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                9:  { l: "9", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                10: { l: "ENC_SDA", f: "enc", d: "Línea de datos I2C #1 asignada para el sensor de Encoder Magnético AS5600.", s: "I2C SDA" },
+                11: { l: "ENC_SCL", f: "enc", d: "Línea de reloj I2C #1 asignada para el sensor de Encoder Magnético AS5600.", s: "I2C SCL" },
+                12: { l: "12", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                13: { l: "13", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                14: { l: "14", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                15: { l: "15", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                16: { l: "16", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                17: { l: "17", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                18: { l: "18", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                19: { l: "USB_D-", f: "usb", d: "Controlador USB OTG Integrado (Señal de Datos Negativa D-). Fijo por hardware.", s: "USB OTG" },
+                20: { l: "USB_D+", f: "usb", d: "Controlador USB OTG Integrado (Señal de Datos Positiva D+). Fijo por hardware.", s: "USB OTG" },
+                21: { l: "21", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                26: { l: "26", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                33: { l: "33", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                34: { l: "34", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                35: { l: "PSRAM_CLK", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad.", s: "System PSRAM Bus", danger: true },
+                36: { l: "PSRAM_CS", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad (Chip Select).", s: "System PSRAM Bus", danger: true },
+                37: { l: "PSRAM_D0", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad (Línea de Datos D0).", s: "System PSRAM Bus", danger: true },
+                38: { l: "38", f: "gpio", d: "GPIO libre. En placas Cam se conecta a la SD Card.", s: "GPIO Libre" },
+                39: { l: "39", f: "gpio", d: "GPIO libre. En placas Cam se conecta a la SD Card.", s: "GPIO Libre" },
+                40: { l: "40", f: "gpio", d: "GPIO libre. En placas Cam se conecta a la SD Card.", s: "GPIO Libre" },
+                41: { l: "41", f: "gpio", d: "GPIO libre. En placas Cam se conecta a la SD Card.", s: "GPIO Libre" },
+                42: { l: "42", f: "gpio", d: "GPIO libre.", s: "GPIO Libre" },
+                43: { l: "TXD0/Debug", f: "uart", d: "Línea de Transmisión del Puerto UART0. Conectada por defecto al chip conversor USB-UART para debug serial.", s: "UART TX" },
+                44: { l: "RXD0/Debug", f: "uart", d: "Línea de Recepción del Puerto UART0. Conectada por defecto al chip conversor USB-UART para debug serial.", s: "UART RX" },
+                45: { l: "45", f: "strap", d: "Pin de strapping (VDD_SPI voltaje). Fija el voltaje del bus flash interno a 1.8V o 3.3V en el boot.", s: "GPIO / Strapping" },
+                46: { l: "46", f: "strap", d: "Pin de strapping (BOOT Mode). En conjunto con GPIO 0 define la entrada a modo de grabación.", s: "GPIO / Strapping" },
+                47: { l: "47", f: "gpio", d: "GPIO libre.", s: "GPIO Libre" },
+                48: { l: "LED_RGB", f: "strap", d: "LED NeoPixel direccionable WS2812 integrado físicamente en el DevKit.", s: "Digital Output" }
+            },
+            cam: {
+                0:  { l: "BOOT/0", f: "strap", d: "Pin BOOT del chip. Conectado al botón físico BOOT con resistencia pull-up externa.", s: "Digital Input / Strapping" },
+                1:  { l: "TOF_SDA", f: "tof", d: "Canal de Datos I2C alternativo asignado para ToF VL53L0X. Redirigido para evitar colisiones.", s: "I2C SDA" },
+                2:  { l: "LED_ON/2", f: "strap", d: "LED integrado en placa. Protegido en este preset para evitar fallos de capacitancia en I2C.", s: "Digital Output / Strapping" },
+                3:  { l: "CAM_D3", f: "cam", d: "Conectado directamente a la línea de datos D3 de la cámara digital OV2640.", s: "Camera Bus" },
+                4:  { l: "CAM_SDA", f: "cam", d: "Bus de control SCCB SDA (I2C) para comandar registros de la cámara OV2640.", s: "Camera Control SCCB" },
+                5:  { l: "CAM_SCL", f: "cam", d: "Bus de control SCCB SCL (I2C) para comandar registros de la cámara OV2640.", s: "Camera Control SCCB" },
+                6:  { l: "CAM_VSYNC", f: "cam", d: "Señal de sincronización vertical de cuadro para la cámara OV2640.", s: "Camera Synchrony" },
+                7:  { l: "CAM_HREF", f: "cam", d: "Señal de referencia horizontal de la cámara digital OV2640.", s: "Camera Synchrony" },
+                8:  { l: "CAM_D2", f: "cam", d: "Conectado directamente a la línea de datos D2 de la cámara digital OV2640.", s: "Camera Bus" },
+                9:  { l: "CAM_D1", f: "cam", d: "Conectado directamente a la línea de datos D1 de la cámara digital OV2640.", s: "Camera Bus" },
+                10: { l: "CAM_D3 (F)", f: "cam", d: "Conectado directamente a la línea de datos D3 de la cámara (Freenove).", s: "Camera Bus" },
+                11: { l: "CAM_PCLK", f: "cam", d: "Reloj de píxel para lectura de matriz de píxeles de la cámara.", s: "Camera Clock" },
+                12: { l: "CAM_D4", f: "cam", d: "Conectado directamente a la línea de datos D4 de la cámara digital OV2640.", s: "Camera Bus" },
+                13: { l: "CAM_D0", f: "cam", d: "Conectado directamente a la línea de datos D0 de la cámara digital OV2640.", s: "Camera Bus" },
+                14: { l: "ENC_SDA", f: "enc", d: "Línea de datos I2C #1 reubicada al GPIO 14 para Encoder AS5600, libre de colisiones.", s: "I2C SDA" },
+                15: { l: "CAM_XCLK", f: "cam", d: "Reloj de sistema principal (Master Clock) para sincronizar la cámara.", s: "Camera Master Clock" },
+                16: { l: "CAM_D7", f: "cam", d: "Conectado directamente a la línea de datos D7 de la cámara digital OV2640.", s: "Camera Bus" },
+                17: { l: "CAM_D6", f: "cam", d: "Conectado directamente a la línea de datos D6 de la cámara digital OV2640.", s: "Camera Bus" },
+                18: { l: "CAM_D5", f: "cam", d: "Conectado directamente a la línea de datos D5 de la cámara digital OV2640.", s: "Camera Bus" },
+                19: { l: "USB_D-", f: "usb", d: "Controlador USB OTG Integrado (Señal de Datos Negativa D-). Fijo por hardware.", s: "USB OTG" },
+                20: { l: "USB_D+", f: "usb", d: "Controlador USB OTG Integrado (Señal de Datos Positiva D+). Fijo por hardware.", s: "USB OTG" },
+                21: { l: "ENC_SCL", f: "enc", d: "Línea de reloj I2C #1 reubicada al GPIO 21 para Encoder AS5600, libre de colisiones.", s: "I2C SCL" },
+                26: { l: "26", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                33: { l: "33", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                34: { l: "34", f: "gpio", d: "GPIO libre de la tarjeta base.", s: "GPIO Libre" },
+                35: { l: "PSRAM_CLK", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad.", s: "System PSRAM Bus", danger: true },
+                36: { l: "PSRAM_CS", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad (Chip Select).", s: "System PSRAM Bus", danger: true },
+                37: { l: "PSRAM_D0", f: "psram", d: "Fijo por hardware para bus de PSRAM Octal OPI de alta velocidad (Línea de Datos D0).", s: "System PSRAM Bus", danger: true },
+                38: { l: "SD_CS", f: "sd", d: "Línea de control Chip Select (CS) para la tarjeta Micro SD vía bus SPI / SDMMC.", s: "SD Card Control" },
+                39: { l: "SD_CLK", f: "sd", d: "Línea de reloj (CLK) para la tarjeta Micro SD.", s: "SD Card Clock" },
+                40: { l: "SD_MISO", f: "sd", d: "Línea de salida de datos (MISO / D0) para la tarjeta Micro SD.", s: "SD Card MISO" },
+                41: { l: "HX_DT", f: "hx", d: "Línea de datos para celda de carga HX711 reubicada en el GPIO 41.", s: "Digital Input" },
+                42: { l: "HX_SCK", f: "hx", d: "Línea de reloj de sincronización para celda de carga HX711 reubicada en el GPIO 42.", s: "Digital Output" },
+                43: { l: "TXD0/Debug", f: "uart", d: "Línea de Transmisión del Puerto UART0. Fija para debug serial.", s: "UART TX" },
+                44: { l: "RXD0/Debug", f: "uart", d: "Línea de Recepción del Puerto UART0. Fija para debug serial.", s: "UART RX" },
+                45: { l: "45", f: "strap", d: "Pin de strapping (VDD_SPI voltaje). Fija voltaje de bus flash en el arranque.", s: "GPIO / Strapping" },
+                46: { l: "46", f: "strap", d: "Pin de strapping (BOOT Mode). Define entrada a flasheo.", s: "GPIO / Strapping" },
+                47: { l: "TOF_SCL", f: "tof", d: "Canal de Reloj I2C alternativo asignado para ToF VL53L0X. Redirigido para evitar colisión.", s: "I2C SCL" },
+                48: { l: "LED_RGB", f: "strap", d: "LED NeoPixel direccionable WS2812 integrado físicamente.", s: "Digital Output" }
+            }
+        };
+
+        // Renderizar Pines Físicos
+        function renderPines() {
+            const leftContainer = document.getElementById('pins-left');
+            const rightContainer = document.getElementById('pins-right');
+            const data = pinDatabase[currentProfile];
+
+            leftContainer.innerHTML = leftPinsOrder.map(gpio => {
+                const pin = data[gpio];
+                const activeClass = `active-${pin.f}`;
+                return `
+                    <div class="phys-pin ${activeClass}" data-gpio="${gpio}" onmouseover="inspectPin(${gpio})" onclick="selectPin(${gpio})">
+                        <span class="num">${gpio}</span>
+                        <span class="label">${pin.l}</span>
+                    </div>
+                `;
+            }).join('');
+
+            rightContainer.innerHTML = rightPinsOrder.map(gpio => {
+                const pin = data[gpio];
+                const activeClass = `active-${pin.f}`;
+                return `
+                    <div class="phys-pin ${activeClass}" data-gpio="${gpio}" onmouseover="inspectPin(${gpio})" onclick="selectPin(${gpio})">
+                        <span class="num">${gpio}</span>
+                        <span class="label">${pin.l}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Inspeccionar Pin
+        function inspectPin(gpio) {
+            const data = pinDatabase[currentProfile][gpio];
+            
+            document.getElementById('det-name').textContent = data.l;
+            document.getElementById('det-status').textContent = `GPIO ${gpio}`;
+            document.getElementById('det-desc').textContent = data.d;
+            document.getElementById('det-gpio').textContent = gpio;
+            document.getElementById('det-fn').textContent = data.f.toUpperCase();
+            document.getElementById('det-sig').textContent = data.s;
+
+            // Alerta de Peligro para PSRAM
+            const dangerRow = document.getElementById('row-danger');
+            if (data.danger) {
+                dangerRow.style.display = 'flex';
+                document.getElementById('det-danger').textContent = 'PSRAM OCTAL (CRÍTICO)';
+            } else {
+                dangerRow.style.display = 'none';
+            }
+        }
+
+        // Seleccionar y Fijar Pin
+        function selectPin(gpio) {
+            // Eliminar pulse de pines anteriores
+            document.querySelectorAll('.phys-pin').forEach(el => el.classList.remove('pulse'));
+            // Agregar pulse al seleccionado
+            const pinEl = document.querySelector(`.phys-pin[data-gpio="${gpio}"]`);
+            if (pinEl) pinEl.classList.add('pulse');
+            
+            inspectPin(gpio);
+        }
+
+        // Cambiar Perfil
+        function setProfile(profile) {
+            currentProfile = profile;
+            
+            // Botones de perfil
+            document.getElementById('btn-base').classList.remove('active');
+            document.getElementById('btn-cam').classList.remove('active');
+            
+            if (profile === 'base') {
+                document.getElementById('btn-base').classList.add('active');
+            } else {
+                document.getElementById('btn-cam').classList.add('active');
+            }
+
+            renderPines();
+            // Resetear inspector
+            inspectPin(0);
+        }
+
+        // Resaltar Categoría
+        function highlightCategory(category) {
+            document.querySelectorAll('.phys-pin').forEach(el => {
+                el.classList.remove('pulse');
+            });
+            
+            const matches = document.querySelectorAll(`.phys-pin.active-${category}`);
+            matches.forEach(el => el.classList.add('pulse'));
+            
+            if (matches.length > 0) {
+                const firstGpio = matches[0].getAttribute('data-gpio');
+                inspectPin(parseInt(firstGpio));
+            }
+        }
+
+        // Inicializar
+        setProfile('base');
+    </script>
+</body>
+</html>

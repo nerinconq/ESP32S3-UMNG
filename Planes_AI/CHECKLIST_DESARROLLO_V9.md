@@ -11,7 +11,7 @@ timeline
     v9.0 : Inicialización QSPI 16MB : Calibración Base Sensores : Core C++ / LittleFS
     v9.2 : Bypass de Portal Cautivo : Exportación Desmos Móvil : Descargas Locales RAM/HTTP
     v9.3 : Roles Multiusuario (Docente PIN 'Umng-2026') : Mapeo Dinámico de Pines (3 Perfiles) : Timeouts I2C y Compresión GZIP
-    v9.4 (Objetivo) : Buffer Circular en PSRAM : Almacenamiento USB Host MSC : Indicador Batería ADC & Sincronización Firebase
+    v9.4 (Objetivo) : Buffer Circular en PSRAM : Almacenamiento USB Host MSC : Batería ADC & Firebase : Revisión Encoder (No Registra)
 ```
 
 ---
@@ -65,6 +65,12 @@ timeline
 - [ ] **Lógica Offline Persistence:** Asegurar que los experimentos se almacenen en el navegador del estudiante (IndexedDB) de forma indefinida.
 - [ ] **Botón "Subir a la Nube" (Sync):** Implementar la carga segura a Firebase mediante el módulo `firebase-sync.js`.
 - [ ] **Visualización UMNG Cloud:** Conectar con el portal de investigación para almacenamiento unificado de prácticas.
+
+### 🔄 5. Revisión del Sensor Encoder (Sin Registro de Datos)
+* **Objetivo:** Investigar y solucionar el fallo por el cual el sensor encoder no registra ni reporta mediciones en el flujo de telemetría.
+- [ ] **Diagnóstico de Conectividad e I2C:** Verificar si el encoder responde en su dirección I2C correspondiente sin provocar bloqueos o interrupciones en la línea de datos.
+- [ ] **Validación de Asignación y Mapeo:** Confirmar que los pines dinámicos asignados al encoder no colisionen con pines de strapping o buses reservados de la placa (en especial en el entorno CAM).
+- [ ] **Depuración de Adquisición en C++:** Revisar las funciones del encoder en `src/main.cpp` para asegurar que las lecturas y actualizaciones de pulsos/ángulos se realicen de forma estable y fluida.
 
 ---
 

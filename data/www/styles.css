@@ -720,10 +720,14 @@ body {
 /* Function colors for pin numbers */
 .gv-pin.fn-i2c .gv-pin-num { color: var(--accent-cyan); }
 .gv-pin.fn-serial .gv-pin-num { color: var(--accent-gold); }
-.gv-pin.fn-uart .gv-pin-num { color: #66ff66; }
-.gv-pin.fn-usb .gv-pin-num { color: var(--accent-purple); }
+.gv-pin.fn-uart .gv-pin-num { color: #8a99ad; }
+.gv-pin.fn-usb .gv-pin-num { color: #3b82f6; }
 .gv-pin.fn-led .gv-pin-num { color: var(--accent-teal); }
 .gv-pin.fn-boot .gv-pin-num { color: #ff66aa; }
+.gv-pin.fn-cam .gv-pin-num { color: #ff6600; }
+.gv-pin.fn-sd .gv-pin-num { color: #ff007f; }
+.gv-pin.fn-psram .gv-pin-num { color: #9900ff; }
+.gv-pin.fn-strap .gv-pin-num { color: #f59e0b; }
 .gv-pin.fn-gpio .gv-pin-num { color: var(--text-muted); }
 /* Legend */
 .gv-legend {
@@ -736,10 +740,14 @@ body {
 .gv-sq { width: 8px; height: 8px; border-radius: 2px; }
 .gv-fn-i2c { background: var(--accent-cyan); }
 .gv-fn-serial { background: var(--accent-gold); }
-.gv-fn-uart { background: #66ff66; }
-.gv-fn-usb { background: var(--accent-purple); }
+.gv-fn-uart { background: #8a99ad; }
+.gv-fn-usb { background: #3b82f6; }
 .gv-fn-led { background: var(--accent-teal); }
 .gv-fn-boot { background: #ff66aa; }
+.gv-fn-cam { background: #ff6600; }
+.gv-fn-sd { background: #ff007f; }
+.gv-fn-psram { background: #9900ff; }
+.gv-fn-strap { background: #f59e0b; }
 .gv-fn-gpio { background: var(--text-muted); }
 .gv-high { background: #00ff88; }
 .gv-low { background: #333; border: 1px solid #555; }

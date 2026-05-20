@@ -323,11 +323,14 @@ function updateDisplay(data) {
     
     // Config updates (feedback loop protection)
     if (data.config) {
-        const tofEl = $('tof_model');
-        const srEl = $('sample_rate');
-        
         // Solo actualizamos si el usuario NO está interactuando con el panel de configuración
         const configVisible = $('config-panel') && $('config-panel').style.display !== 'none';
+        if (configVisible) {
+            // Si el panel de configuración está activo, bloqueamos actualizaciones por WebSocket para evitar feedback loops
+            return;
+        }
+        const tofEl = $('tof_model');
+        const srEl = $('sample_rate');
         
         if (!configVisible || (tofEl && document.activeElement !== tofEl)) {
             if (data.config.tof_model && tofEl && tofEl.value != data.config.tof_model) {
@@ -1287,8 +1290,8 @@ let gvInterval = null;
 let gvActive = false;
 
 // ESP32-S3 WROOM-1 physical top-to-bottom layout mapping
-const leftOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14];
-const rightOrder = [21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2, 1, 26];
+const leftOrder = [3, 46, 9, 10, 11, 12, 13, 14, 21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2];
+const rightOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 19, 20, 26, 43, 44, 1, 33, 34];
 
 function renderGpioPins(pins) {
     const leftCol = $('gv-left-pins');
@@ -1374,8 +1377,10 @@ function switchTab(tabName) {
         // Sync nav icon active states
         const cfgBtn = $('btn-nav-config');
         const gpioBtn = $('btn-nav-gpio');
+        const chartBtn = $('btn-nav-chart');
         if (cfgBtn) cfgBtn.classList.toggle('active', tabName === 'config');
         if (gpioBtn) gpioBtn.classList.toggle('active', tabName === 'gpioview');
+        if (chartBtn) chartBtn.classList.toggle('active', ['movimiento', 'rotacion', 'fuerza'].includes(tabName));
 
         // Sync sensor dropdown
         const sensorSelect = $('sensor-select');
@@ -1481,14 +1486,44 @@ function openExportModal() {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;justify-content:center;align-items:center;z-index:9999;backdrop-filter:blur(4px)';
 
+    // Popstate Hack to prevent exiting the application on Android Back Button press
+    history.pushState({ modal: 'export' }, '');
+    
+    const handlePopState = (e) => {
+        closeOverlay(true); // Close modal cleanly without backing history again
+    };
+    window.addEventListener('popstate', handlePopState);
+    
+    function closeOverlay(fromPopState = false) {
+        overlay.remove();
+        window.removeEventListener('popstate', handlePopState);
+        if (!fromPopState && history.state && history.state.modal === 'export') {
+            history.back(); // Restore pristine state history
+        }
+    }
+
     const modal = document.createElement('div');
     modal.className = 'glass-card';
     modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:16px;width:90%;max-width:400px;color:#fff;box-shadow:0 20px 50px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1)';
 
+    // Elegant Header with Title and Premium '✕' Close Button
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+    
     const title = document.createElement('h3');
     title.textContent = '📤 Exportar Datos';
-    title.style.cssText = 'margin:0 0 6px 0;color:#f0b429';
-    modal.appendChild(title);
+    title.style.cssText = 'margin:0;color:#f0b429';
+    
+    const closeX = document.createElement('button');
+    closeX.innerHTML = '✕';
+    closeX.style.cssText = 'background:transparent;border:none;color:#ef4444;font-size:24px;cursor:pointer;padding:4px 8px;font-weight:bold;line-height:1;transition:transform 0.2s;';
+    closeX.onmouseover = () => closeX.style.transform = 'scale(1.2)';
+    closeX.onmouseout = () => closeX.style.transform = 'scale(1.0)';
+    closeX.onclick = () => closeOverlay();
+    
+    headerContainer.appendChild(title);
+    headerContainer.appendChild(closeX);
+    modal.appendChild(headerContainer);
 
     const info = document.createElement('p');
     info.style.cssText = 'font-size:13px;color:#94a3b8;margin-bottom:18px';
@@ -1505,8 +1540,8 @@ function openExportModal() {
     }
 
     if (count > 0) {
-        mkBtn('📊 Exportar CSV', '#14f0c5', () => { overlay.remove(); exportSensorCSV(); });
-        mkBtn('📋 Exportar JSON', '#f0b429', () => { overlay.remove(); exportJSON(); });
+        mkBtn('📊 Exportar CSV', '#14f0c5', () => { closeOverlay(); exportSensorCSV(); });
+        mkBtn('📋 Exportar JSON', '#f0b429', () => { closeOverlay(); exportJSON(); });
     }
 
     if (navigator.share && count > 0) {
@@ -1516,11 +1551,11 @@ function openExportModal() {
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
             }
-            overlay.remove();
+            closeOverlay();
         });
     }
 
-    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
+    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { closeOverlay(); exportToUsb(); });
 
     // ─── Sección Desmos & Hojas de Cálculo ───
     if (count > 0) {
@@ -1552,8 +1587,15 @@ function openExportModal() {
                 body: content
             }).then(r => r.json()).then(j => {
                 if (j.ok) {
-                    // Abrir la URL real del ESP32 para descargar
-                    window.open('/api/temp-export', '_blank');
+                    // Descargar de forma segura a través de un iframe invisible para no alterar el historial del navegador
+                    let iframe = document.getElementById('download-iframe');
+                    if (!iframe) {
+                        iframe = document.createElement('iframe');
+                        iframe.id = 'download-iframe';
+                        iframe.style.display = 'none';
+                        document.body.appendChild(iframe);
+                    }
+                    iframe.src = '/api/temp-export';
                     return true;
                 }
                 throw new Error('Servidor no pudo guardar');
@@ -1728,11 +1770,11 @@ calc.setState(${stateJson});
     closeBtn.textContent = 'Cerrar';
     closeBtn.className = 'btn-action';
     closeBtn.style.cssText = 'width:100%;padding:10px;margin-top:4px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px';
-    closeBtn.onclick = () => overlay.remove();
+    closeBtn.onclick = () => closeOverlay();
     modal.appendChild(closeBtn);
 
     overlay.appendChild(modal);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
     document.body.appendChild(overlay);
 }
 
@@ -2151,6 +2193,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const sensorSelect = $('sensor-select');
     if (sensorSelect) {
         sensorSelect.addEventListener('change', (e) => switchTab(e.target.value));
+        // Permitir retornar de paneles config/gpio tocando o clickeando el selector de sensores
+        sensorSelect.addEventListener('click', () => {
+            if (!['movimiento', 'rotacion', 'fuerza'].includes(currentTab)) {
+                switchTab(sensorSelect.value);
+            }
+        });
         // Allow re-selecting the same sensor (e.g., to return from config)
         let dropdownOpened = false;
         sensorSelect.addEventListener('focus', () => { dropdownOpened = true; });
@@ -2163,7 +2211,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Desenfocar selectores tras cambio de valor para evitar secuestro de scroll
+    document.addEventListener('change', (e) => {
+        if (e.target.tagName === 'SELECT') {
+            e.target.blur();
+        }
+    });
+
     // Nav icon buttons — toggle behavior (click again = go back)
+    if ($('btn-nav-chart')) $('btn-nav-chart').addEventListener('click', () => {
+        switchTab(lastSensorTab || 'movimiento');
+    });
     if ($('btn-nav-config')) $('btn-nav-config').addEventListener('click', () => {
         const isConfig = currentTab === 'config';
         switchTab(isConfig ? lastSensorTab : 'config');
