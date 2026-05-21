@@ -323,11 +323,14 @@ function updateDisplay(data) {
     
     // Config updates (feedback loop protection)
     if (data.config) {
-        const tofEl = $('tof_model');
-        const srEl = $('sample_rate');
-        
         // Solo actualizamos si el usuario NO está interactuando con el panel de configuración
         const configVisible = $('config-panel') && $('config-panel').style.display !== 'none';
+        if (configVisible) {
+            // Si el panel de configuración está activo, bloqueamos actualizaciones por WebSocket para evitar feedback loops
+            return;
+        }
+        const tofEl = $('tof_model');
+        const srEl = $('sample_rate');
         
         if (!configVisible || (tofEl && document.activeElement !== tofEl)) {
             if (data.config.tof_model && tofEl && tofEl.value != data.config.tof_model) {
@@ -1287,8 +1290,8 @@ let gvInterval = null;
 let gvActive = false;
 
 // ESP32-S3 WROOM-1 physical top-to-bottom layout mapping
-const leftOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 3, 46, 9, 10, 11, 12, 13, 14];
-const rightOrder = [21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2, 1, 26];
+const leftOrder = [3, 46, 9, 10, 11, 12, 13, 14, 21, 47, 48, 45, 0, 35, 36, 37, 38, 39, 40, 41, 42, 2];
+const rightOrder = [4, 5, 6, 7, 15, 16, 17, 18, 8, 19, 20, 26, 43, 44, 1, 33, 34];
 
 function renderGpioPins(pins) {
     const leftCol = $('gv-left-pins');
@@ -1374,8 +1377,10 @@ function switchTab(tabName) {
         // Sync nav icon active states
         const cfgBtn = $('btn-nav-config');
         const gpioBtn = $('btn-nav-gpio');
+        const chartBtn = $('btn-nav-chart');
         if (cfgBtn) cfgBtn.classList.toggle('active', tabName === 'config');
         if (gpioBtn) gpioBtn.classList.toggle('active', tabName === 'gpioview');
+        if (chartBtn) chartBtn.classList.toggle('active', ['movimiento', 'rotacion', 'fuerza'].includes(tabName));
 
         // Sync sensor dropdown
         const sensorSelect = $('sensor-select');
@@ -1481,14 +1486,44 @@ function openExportModal() {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;justify-content:center;align-items:center;z-index:9999;backdrop-filter:blur(4px)';
 
+    // Popstate Hack to prevent exiting the application on Android Back Button press
+    history.pushState({ modal: 'export' }, '');
+    
+    const handlePopState = (e) => {
+        closeOverlay(true); // Close modal cleanly without backing history again
+    };
+    window.addEventListener('popstate', handlePopState);
+    
+    function closeOverlay(fromPopState = false) {
+        overlay.remove();
+        window.removeEventListener('popstate', handlePopState);
+        if (!fromPopState && history.state && history.state.modal === 'export') {
+            history.back(); // Restore pristine state history
+        }
+    }
+
     const modal = document.createElement('div');
     modal.className = 'glass-card';
     modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:16px;width:90%;max-width:400px;color:#fff;box-shadow:0 20px 50px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.1)';
 
+    // Elegant Header with Title and Premium '✕' Close Button
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+    
     const title = document.createElement('h3');
     title.textContent = '📤 Exportar Datos';
-    title.style.cssText = 'margin:0 0 6px 0;color:#f0b429';
-    modal.appendChild(title);
+    title.style.cssText = 'margin:0;color:#f0b429';
+    
+    const closeX = document.createElement('button');
+    closeX.innerHTML = '✕';
+    closeX.style.cssText = 'background:transparent;border:none;color:#ef4444;font-size:24px;cursor:pointer;padding:4px 8px;font-weight:bold;line-height:1;transition:transform 0.2s;';
+    closeX.onmouseover = () => closeX.style.transform = 'scale(1.2)';
+    closeX.onmouseout = () => closeX.style.transform = 'scale(1.0)';
+    closeX.onclick = () => closeOverlay();
+    
+    headerContainer.appendChild(title);
+    headerContainer.appendChild(closeX);
+    modal.appendChild(headerContainer);
 
     const info = document.createElement('p');
     info.style.cssText = 'font-size:13px;color:#94a3b8;margin-bottom:18px';
@@ -1505,8 +1540,8 @@ function openExportModal() {
     }
 
     if (count > 0) {
-        mkBtn('📊 Exportar CSV', '#14f0c5', () => { overlay.remove(); exportSensorCSV(); });
-        mkBtn('📋 Exportar JSON', '#f0b429', () => { overlay.remove(); exportJSON(); });
+        mkBtn('📊 Exportar CSV', '#14f0c5', () => { closeOverlay(); exportSensorCSV(); });
+        mkBtn('📋 Exportar JSON', '#f0b429', () => { closeOverlay(); exportJSON(); });
     }
 
     if (navigator.share && count > 0) {
@@ -1516,11 +1551,11 @@ function openExportModal() {
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 navigator.share({ title: 'Physys Lab', files: [file] }).catch(() => {});
             }
-            overlay.remove();
+            closeOverlay();
         });
     }
 
-    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { overlay.remove(); exportToUsb(); });
+    mkBtn('💾 Exportar a Pendrive (USB)', '#6366f1', () => { closeOverlay(); exportToUsb(); });
 
     // ─── Sección Desmos & Hojas de Cálculo ───
     if (count > 0) {
@@ -1552,8 +1587,15 @@ function openExportModal() {
                 body: content
             }).then(r => r.json()).then(j => {
                 if (j.ok) {
-                    // Abrir la URL real del ESP32 para descargar
-                    window.open('/api/temp-export', '_blank');
+                    // Descargar de forma segura a través de un iframe invisible para no alterar el historial del navegador
+                    let iframe = document.getElementById('download-iframe');
+                    if (!iframe) {
+                        iframe = document.createElement('iframe');
+                        iframe.id = 'download-iframe';
+                        iframe.style.display = 'none';
+                        document.body.appendChild(iframe);
+                    }
+                    iframe.src = '/api/temp-export';
                     return true;
                 }
                 throw new Error('Servidor no pudo guardar');
@@ -1728,11 +1770,11 @@ calc.setState(${stateJson});
     closeBtn.textContent = 'Cerrar';
     closeBtn.className = 'btn-action';
     closeBtn.style.cssText = 'width:100%;padding:10px;margin-top:4px;background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:10px';
-    closeBtn.onclick = () => overlay.remove();
+    closeBtn.onclick = () => closeOverlay();
     modal.appendChild(closeBtn);
 
     overlay.appendChild(modal);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
     document.body.appendChild(overlay);
 }
 
@@ -2151,6 +2193,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const sensorSelect = $('sensor-select');
     if (sensorSelect) {
         sensorSelect.addEventListener('change', (e) => switchTab(e.target.value));
+        // Permitir retornar de paneles config/gpio tocando o clickeando el selector de sensores
+        sensorSelect.addEventListener('click', () => {
+            if (!['movimiento', 'rotacion', 'fuerza'].includes(currentTab)) {
+                switchTab(sensorSelect.value);
+            }
+        });
         // Allow re-selecting the same sensor (e.g., to return from config)
         let dropdownOpened = false;
         sensorSelect.addEventListener('focus', () => { dropdownOpened = true; });
@@ -2163,7 +2211,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Desenfocar selectores tras cambio de valor para evitar secuestro de scroll
+    document.addEventListener('change', (e) => {
+        if (e.target.tagName === 'SELECT') {
+            e.target.blur();
+        }
+    });
+
     // Nav icon buttons — toggle behavior (click again = go back)
+    if ($('btn-nav-chart')) $('btn-nav-chart').addEventListener('click', () => {
+        switchTab(lastSensorTab || 'movimiento');
+    });
     if ($('btn-nav-config')) $('btn-nav-config').addEventListener('click', () => {
         const isConfig = currentTab === 'config';
         switchTab(isConfig ? lastSensorTab : 'config');
@@ -2298,7 +2356,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─── MULTI-USER ROLE MANAGEMENT & HARDWARE PROFILE UTILITIES ───
-const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47];
+const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47, 48];
 
 function syncRoleUI() {
     const isLocked = (currentUserRole === 'student');
@@ -2369,7 +2427,7 @@ function syncRoleUI() {
     if (profileSelect) {
         profileSelect.disabled = !canEditPins;
     }
-    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     selects.forEach(id => {
         const el = $(id);
         if (el) {
@@ -2480,7 +2538,7 @@ function submitAuth() {
 
 function applyPinProfilePreset(preset) {
     const isCustom = (preset === 'custom');
-    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     
     const presets = {
         basic: {
@@ -2489,7 +2547,8 @@ function applyPinProfilePreset(preset) {
             'pin-enc-sda': '10',
             'pin-enc-scl': '11',
             'pin-hx-dt': '6',
-            'pin-hx-sck': '7'
+            'pin-hx-sck': '7',
+            'pin-led-rgb': '48'
         },
         cam: {
             'pin-tof-sda': '1',
@@ -2497,7 +2556,8 @@ function applyPinProfilePreset(preset) {
             'pin-enc-sda': '14',
             'pin-enc-scl': '21',
             'pin-hx-dt': '41',
-            'pin-hx-sck': '42'
+            'pin-hx-sck': '42',
+            'pin-led-rgb': '48'
         }
     };
     
@@ -2523,6 +2583,37 @@ function applyPinProfilePreset(preset) {
             if (el) el.disabled = false;
         });
     }
+    checkUnsavedPinChanges();
+}
+
+function checkUnsavedPinChanges() {
+    const banner = $('gv-unsaved-pins-banner');
+    if (!banner || !activeHardwareProfile || !activeHardwareProfile.pins) return;
+
+    const p = activeHardwareProfile.pins;
+    const tofSda = parseInt($('pin-tof-sda')?.value || -1);
+    const tofScl = parseInt($('pin-tof-scl')?.value || -1);
+    const encSda = parseInt($('pin-enc-sda')?.value || -1);
+    const encScl = parseInt($('pin-enc-scl')?.value || -1);
+    const hxDt = parseInt($('pin-hx-dt')?.value || -1);
+    const hxSck = parseInt($('pin-hx-sck')?.value || -1);
+    const ledRgb = parseInt($('pin-led-rgb')?.value || -1);
+
+    const hasChanges = (
+        tofSda !== parseInt(p.tof_sda) ||
+        tofScl !== parseInt(p.tof_scl) ||
+        encSda !== parseInt(p.enc_sda) ||
+        encScl !== parseInt(p.enc_scl) ||
+        hxDt !== parseInt(p.hx_dt) ||
+        hxSck !== parseInt(p.hx_sck) ||
+        ledRgb !== parseInt(p.led_rgb || 48)
+    );
+
+    if (hasChanges && currentUserRole === 'teacher') {
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
 }
 
 function populatePinSelectors() {
@@ -2534,10 +2625,15 @@ function populatePinSelectors() {
     const standardCamPins = [17, 18];
     const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
 
-    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     selectors.forEach(id => {
         const selectEl = $(id);
         if (!selectEl) return;
+        
+        if (!selectEl.hasPinChangeListener) {
+            selectEl.addEventListener('change', checkUnsavedPinChanges);
+            selectEl.hasPinChangeListener = true;
+        }
         
         const currentVal = selectEl.value;
         
@@ -2562,8 +2658,8 @@ function populatePinSelectors() {
     // Detectar si el pinout actual corresponde a Básico o Cámara para marcar el selector de perfiles
     if (activeHardwareProfile.pins) {
         const p = activeHardwareProfile.pins;
-        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7);
-        const isCam = (p.tof_sda == 1 && p.tof_scl == 2 && p.enc_sda == 3 && p.enc_scl == 14 && p.hx_dt == 21 && p.hx_sck == 26);
+        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7 && p.led_rgb == 48);
+        const isCam = (p.tof_sda == 1 && p.tof_scl == 47 && p.enc_sda == 14 && p.enc_scl == 21 && p.hx_dt == 41 && p.hx_sck == 42 && (!p.led_rgb || p.led_rgb == 48));
         
         const profileSelect = $('pin-profile-select');
         if (profileSelect) {
@@ -2582,6 +2678,7 @@ function populatePinSelectors() {
         // Dynamically synchronize the sidebar ESP32 hardware diagram with the active pins configuration
         updateSidebarDiagram();
     }
+    checkUnsavedPinChanges();
 }
 
 function applyCustomPins() {
@@ -2596,11 +2693,12 @@ function applyCustomPins() {
     const encScl = parseInt($('pin-enc-scl').value);
     const hxDt = parseInt($('pin-hx-dt').value);
     const hxSck = parseInt($('pin-hx-sck').value);
+    const ledRgb = parseInt($('pin-led-rgb').value);
 
     // Unique values assertion (ignorando NaN si los hay)
-    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck].filter(v => !isNaN(v));
+    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck, ledRgb].filter(v => !isNaN(v));
     const uniqueValues = new Set(values);
-    if (uniqueValues.size !== values.length || values.length !== 6) {
+    if (uniqueValues.size !== values.length || values.length !== 7) {
         alert('❌ Error: Faltan pines por asignar o hay pines duplicados.');
         return;
     }
@@ -2619,7 +2717,7 @@ function applyCustomPins() {
         }
     }
 
-    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck}`;
+    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck},${ledRgb}`;
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(cmd);
         showNotification('🔌 Enviando reasignación de pines a la tarjeta...', '#38bdf8');
@@ -2727,7 +2825,7 @@ function updateSidebarDiagram() {
     rightCol.innerHTML = `
         <div class="p-node i2c" data-gpio="${p.enc_sda}"><span class="pin-num">${p.enc_sda}</span> ENC-SDA</div>
         <div class="p-node i2c" data-gpio="${p.enc_scl}"><span class="pin-num">${p.enc_scl}</span> ENC-SCL</div>
-        <div class="p-node led" data-gpio="48"><span class="pin-num">48</span> WS2812</div>
+        <div class="p-node led" data-gpio="${p.led_rgb || 48}"><span class="pin-num">${p.led_rgb || 48}</span> WS2812</div>
         <div class="p-node boot-pin" data-gpio="0"><span class="pin-num">0</span> BOOT</div>
     `;
 }
@@ -2775,6 +2873,7 @@ function showPinConfigTooltip(gpioNum, targetEl) {
             <button onclick="assignPinTo(${gpioNum}, 'pin-enc-scl')">Encoder SCL</button>
             <button onclick="assignPinTo(${gpioNum}, 'pin-hx-dt')">HX711 DT</button>
             <button onclick="assignPinTo(${gpioNum}, 'pin-hx-sck')">HX711 SCK</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-led-rgb')">LED RGB</button>
             <button class="btn-danger" style="margin-top:4px;" onclick="assignPinTo(${gpioNum}, 'release')">Liberar Pin</button>
         </div>
     `;
@@ -2802,7 +2901,13 @@ function assignPinTo(gpioNum, targetSelectId) {
     }
 
     if (targetSelectId === 'release') {
-        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+        const profileSelect = $('pin-profile-select');
+        if (profileSelect && profileSelect.value !== 'custom') {
+            profileSelect.value = 'custom';
+            applyPinProfilePreset('custom');
+        }
+
+        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
         let freed = false;
         selectors.forEach(id => {
             const el = $(id);
@@ -2819,6 +2924,7 @@ function assignPinTo(gpioNum, targetSelectId) {
         if (!freed) {
             showNotification(`ℹ️ GPIO ${gpioNum} no estaba asignado a ningún sensor.`, '#94a3b8');
         }
+        checkUnsavedPinChanges();
         return;
     }
 
@@ -2859,10 +2965,12 @@ function assignPinTo(gpioNum, targetSelectId) {
         'pin-enc-sda': 'Encoder SDA',
         'pin-enc-scl': 'Encoder SCL',
         'pin-hx-dt': 'HX711 DT',
-        'pin-hx-sck': 'HX711 SCK'
+        'pin-hx-sck': 'HX711 SCK',
+        'pin-led-rgb': 'LED RGB'
     };
 
     showNotification(`📌 GPIO ${gpioNum} asignado a ${nameMap[targetSelectId]}! Recuerda hacer clic en "💾 Guardar y Reiniciar ESP32" para aplicar los cambios.`, '#eab308');
+    checkUnsavedPinChanges();
 }
 
 function showCaptivePortalOverlay() {

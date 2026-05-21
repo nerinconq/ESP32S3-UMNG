@@ -2356,7 +2356,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─── MULTI-USER ROLE MANAGEMENT & HARDWARE PROFILE UTILITIES ───
-const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47];
+const SAFE_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 26, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 47, 48];
 
 function syncRoleUI() {
     const isLocked = (currentUserRole === 'student');
@@ -2427,7 +2427,7 @@ function syncRoleUI() {
     if (profileSelect) {
         profileSelect.disabled = !canEditPins;
     }
-    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     selects.forEach(id => {
         const el = $(id);
         if (el) {
@@ -2538,7 +2538,7 @@ function submitAuth() {
 
 function applyPinProfilePreset(preset) {
     const isCustom = (preset === 'custom');
-    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selects = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     
     const presets = {
         basic: {
@@ -2547,7 +2547,8 @@ function applyPinProfilePreset(preset) {
             'pin-enc-sda': '10',
             'pin-enc-scl': '11',
             'pin-hx-dt': '6',
-            'pin-hx-sck': '7'
+            'pin-hx-sck': '7',
+            'pin-led-rgb': '48'
         },
         cam: {
             'pin-tof-sda': '1',
@@ -2555,7 +2556,8 @@ function applyPinProfilePreset(preset) {
             'pin-enc-sda': '14',
             'pin-enc-scl': '21',
             'pin-hx-dt': '41',
-            'pin-hx-sck': '42'
+            'pin-hx-sck': '42',
+            'pin-led-rgb': '48'
         }
     };
     
@@ -2581,6 +2583,37 @@ function applyPinProfilePreset(preset) {
             if (el) el.disabled = false;
         });
     }
+    checkUnsavedPinChanges();
+}
+
+function checkUnsavedPinChanges() {
+    const banner = $('gv-unsaved-pins-banner');
+    if (!banner || !activeHardwareProfile || !activeHardwareProfile.pins) return;
+
+    const p = activeHardwareProfile.pins;
+    const tofSda = parseInt($('pin-tof-sda')?.value || -1);
+    const tofScl = parseInt($('pin-tof-scl')?.value || -1);
+    const encSda = parseInt($('pin-enc-sda')?.value || -1);
+    const encScl = parseInt($('pin-enc-scl')?.value || -1);
+    const hxDt = parseInt($('pin-hx-dt')?.value || -1);
+    const hxSck = parseInt($('pin-hx-sck')?.value || -1);
+    const ledRgb = parseInt($('pin-led-rgb')?.value || -1);
+
+    const hasChanges = (
+        tofSda !== parseInt(p.tof_sda) ||
+        tofScl !== parseInt(p.tof_scl) ||
+        encSda !== parseInt(p.enc_sda) ||
+        encScl !== parseInt(p.enc_scl) ||
+        hxDt !== parseInt(p.hx_dt) ||
+        hxSck !== parseInt(p.hx_sck) ||
+        ledRgb !== parseInt(p.led_rgb || 48)
+    );
+
+    if (hasChanges && currentUserRole === 'teacher') {
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
 }
 
 function populatePinSelectors() {
@@ -2592,10 +2625,15 @@ function populatePinSelectors() {
     const standardCamPins = [17, 18];
     const blockedPins = isCamera ? (cameraType === "freenove_cam" ? freenoveCamPins : standardCamPins) : [];
 
-    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+    const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
     selectors.forEach(id => {
         const selectEl = $(id);
         if (!selectEl) return;
+        
+        if (!selectEl.hasPinChangeListener) {
+            selectEl.addEventListener('change', checkUnsavedPinChanges);
+            selectEl.hasPinChangeListener = true;
+        }
         
         const currentVal = selectEl.value;
         
@@ -2620,8 +2658,8 @@ function populatePinSelectors() {
     // Detectar si el pinout actual corresponde a Básico o Cámara para marcar el selector de perfiles
     if (activeHardwareProfile.pins) {
         const p = activeHardwareProfile.pins;
-        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7);
-        const isCam = (p.tof_sda == 1 && p.tof_scl == 2 && p.enc_sda == 3 && p.enc_scl == 14 && p.hx_dt == 21 && p.hx_sck == 26);
+        const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7 && p.led_rgb == 48);
+        const isCam = (p.tof_sda == 1 && p.tof_scl == 47 && p.enc_sda == 14 && p.enc_scl == 21 && p.hx_dt == 41 && p.hx_sck == 42 && (!p.led_rgb || p.led_rgb == 48));
         
         const profileSelect = $('pin-profile-select');
         if (profileSelect) {
@@ -2640,6 +2678,7 @@ function populatePinSelectors() {
         // Dynamically synchronize the sidebar ESP32 hardware diagram with the active pins configuration
         updateSidebarDiagram();
     }
+    checkUnsavedPinChanges();
 }
 
 function applyCustomPins() {
@@ -2654,11 +2693,12 @@ function applyCustomPins() {
     const encScl = parseInt($('pin-enc-scl').value);
     const hxDt = parseInt($('pin-hx-dt').value);
     const hxSck = parseInt($('pin-hx-sck').value);
+    const ledRgb = parseInt($('pin-led-rgb').value);
 
     // Unique values assertion (ignorando NaN si los hay)
-    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck].filter(v => !isNaN(v));
+    const values = [tofSda, tofScl, encSda, encScl, hxDt, hxSck, ledRgb].filter(v => !isNaN(v));
     const uniqueValues = new Set(values);
-    if (uniqueValues.size !== values.length || values.length !== 6) {
+    if (uniqueValues.size !== values.length || values.length !== 7) {
         alert('❌ Error: Faltan pines por asignar o hay pines duplicados.');
         return;
     }
@@ -2677,7 +2717,7 @@ function applyCustomPins() {
         }
     }
 
-    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck}`;
+    const cmd = `SET_PINS:${tofSda},${tofScl},${encSda},${encScl},${hxDt},${hxSck},${ledRgb}`;
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(cmd);
         showNotification('🔌 Enviando reasignación de pines a la tarjeta...', '#38bdf8');
@@ -2785,7 +2825,7 @@ function updateSidebarDiagram() {
     rightCol.innerHTML = `
         <div class="p-node i2c" data-gpio="${p.enc_sda}"><span class="pin-num">${p.enc_sda}</span> ENC-SDA</div>
         <div class="p-node i2c" data-gpio="${p.enc_scl}"><span class="pin-num">${p.enc_scl}</span> ENC-SCL</div>
-        <div class="p-node led" data-gpio="48"><span class="pin-num">48</span> WS2812</div>
+        <div class="p-node led" data-gpio="${p.led_rgb || 48}"><span class="pin-num">${p.led_rgb || 48}</span> WS2812</div>
         <div class="p-node boot-pin" data-gpio="0"><span class="pin-num">0</span> BOOT</div>
     `;
 }
@@ -2833,6 +2873,7 @@ function showPinConfigTooltip(gpioNum, targetEl) {
             <button onclick="assignPinTo(${gpioNum}, 'pin-enc-scl')">Encoder SCL</button>
             <button onclick="assignPinTo(${gpioNum}, 'pin-hx-dt')">HX711 DT</button>
             <button onclick="assignPinTo(${gpioNum}, 'pin-hx-sck')">HX711 SCK</button>
+            <button onclick="assignPinTo(${gpioNum}, 'pin-led-rgb')">LED RGB</button>
             <button class="btn-danger" style="margin-top:4px;" onclick="assignPinTo(${gpioNum}, 'release')">Liberar Pin</button>
         </div>
     `;
@@ -2860,7 +2901,13 @@ function assignPinTo(gpioNum, targetSelectId) {
     }
 
     if (targetSelectId === 'release') {
-        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck'];
+        const profileSelect = $('pin-profile-select');
+        if (profileSelect && profileSelect.value !== 'custom') {
+            profileSelect.value = 'custom';
+            applyPinProfilePreset('custom');
+        }
+
+        const selectors = ['pin-tof-sda', 'pin-tof-scl', 'pin-enc-sda', 'pin-enc-scl', 'pin-hx-dt', 'pin-hx-sck', 'pin-led-rgb'];
         let freed = false;
         selectors.forEach(id => {
             const el = $(id);
@@ -2877,6 +2924,7 @@ function assignPinTo(gpioNum, targetSelectId) {
         if (!freed) {
             showNotification(`ℹ️ GPIO ${gpioNum} no estaba asignado a ningún sensor.`, '#94a3b8');
         }
+        checkUnsavedPinChanges();
         return;
     }
 
@@ -2917,10 +2965,12 @@ function assignPinTo(gpioNum, targetSelectId) {
         'pin-enc-sda': 'Encoder SDA',
         'pin-enc-scl': 'Encoder SCL',
         'pin-hx-dt': 'HX711 DT',
-        'pin-hx-sck': 'HX711 SCK'
+        'pin-hx-sck': 'HX711 SCK',
+        'pin-led-rgb': 'LED RGB'
     };
 
     showNotification(`📌 GPIO ${gpioNum} asignado a ${nameMap[targetSelectId]}! Recuerda hacer clic en "💾 Guardar y Reiniciar ESP32" para aplicar los cambios.`, '#eab308');
+    checkUnsavedPinChanges();
 }
 
 function showCaptivePortalOverlay() {

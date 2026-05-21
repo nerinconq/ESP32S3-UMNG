@@ -46,8 +46,9 @@ int pinEncSda = 10;
 int pinEncScl = 11;
 int pinHxDt = 6;
 int pinHxSck = 7;
-#define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove)
+#define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove / YD-ESP32S3)
 #define NUM_LEDS       1
+int pinLedRgb = LED_PIN;    // GPIO variable para LED dinámico (NVS persistente)
 #define FACTORY_RESET_PIN 0 // GPIO0 — BOOT button = Factory Reset (10s hold)
 
 // ═══════════════════════════════════════════════════════════════
@@ -171,6 +172,19 @@ void checkGlobalStop();
 // ═══════════════════════════════════════════════════════════════
 // SEMÁFORO LED (RMT via FastLED)
 // ═══════════════════════════════════════════════════════════════
+void initFastLED(int pin) {
+  switch (pin) {
+    case 48: FastLED.addLeds<WS2812, 48, GRB>(leds, NUM_LEDS); break;
+    case 38: FastLED.addLeds<WS2812, 38, GRB>(leds, NUM_LEDS); break;
+    case 21: FastLED.addLeds<WS2812, 21, GRB>(leds, NUM_LEDS); break;
+    case 8:  FastLED.addLeds<WS2812, 8,  GRB>(leds, NUM_LEDS); break;
+    case 2:  FastLED.addLeds<WS2812, 2,  GRB>(leds, NUM_LEDS); break;
+    case 18: FastLED.addLeds<WS2812, 18, GRB>(leds, NUM_LEDS); break;
+    case 47: FastLED.addLeds<WS2812, 47, GRB>(leds, NUM_LEDS); break;
+    default: FastLED.addLeds<WS2812, 48, GRB>(leds, NUM_LEDS); break;
+  }
+}
+
 void setLED(CRGB color) {
   leds[0] = color;
   FastLED.show();
@@ -204,6 +218,7 @@ void loadSettings() {
   pinEncScl = preferences.getInt("pin_enc_scl", 11);
   pinHxDt = preferences.getInt("pin_hx_dt", 6);
   pinHxSck = preferences.getInt("pin_hx_sck", 7);
+  pinLedRgb = preferences.getInt("pin_led_rgb", LED_PIN);
   preferences.end();
   
   // Validaciones de seguridad - Forzar 10ms (100Hz) si no es válido o es la primera vez
@@ -267,6 +282,7 @@ void saveSettings() {
   preferences.putInt("pin_enc_scl", pinEncScl);
   preferences.putInt("pin_hx_dt", pinHxDt);
   preferences.putInt("pin_hx_sck", pinHxSck);
+  preferences.putInt("pin_led_rgb", pinLedRgb);
   preferences.end();
   Serial.println("[NVS] Guardado exitoso");
 }
@@ -607,6 +623,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     doc["sensors"]["usb"] = usbConnected;
     doc["config"]["trigger_enabled"] = state.triggerEnabled;
     doc["config"]["tube_length"] = state.tubeLength;
+    
+    bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
+    doc["hardware"]["camera_detected"] = isCamProfile;
+    doc["hardware"]["type"] = isCamProfile ? "freenove_cam" : "standard_base";
+    doc["hardware"]["pins"]["tof_sda"] = pinTofSda;
+    doc["hardware"]["pins"]["tof_scl"] = pinTofScl;
+    doc["hardware"]["pins"]["enc_sda"] = pinEncSda;
+    doc["hardware"]["pins"]["enc_scl"] = pinEncScl;
+    doc["hardware"]["pins"]["hx_dt"] = pinHxDt;
+    doc["hardware"]["pins"]["hx_sck"] = pinHxSck;
+    doc["hardware"]["pins"]["led_rgb"] = pinLedRgb;
+    
     String json;
     serializeJson(doc, json);
     client->text(json);
@@ -769,26 +797,43 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       if (currentTeacherIp != clientIp) return; // SOLO DOCENTE (Líder NO puede reasignar pines de hardware)
       
       String payload = msg.substring(9);
-      // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck
-      int p[6];
-      int lastIndex = 0;
-      for (int i=0; i<6; i++) {
-        int commaIndex = payload.indexOf(',', lastIndex);
-        if (commaIndex == -1 && i == 5) commaIndex = payload.length();
-        if (commaIndex != -1) {
-          p[i] = payload.substring(lastIndex, commaIndex).toInt();
-          lastIndex = commaIndex + 1;
-        } else { p[i] = -1; }
-      }
-      
-      if (p[0] != -1) {
-        pinTofSda = p[0]; pinTofScl = p[1];
-        pinEncSda = p[2]; pinEncScl = p[3];
-        pinHxDt = p[4]; pinHxSck = p[5];
-        saveSettings();
-        Serial.println("[CMD] Pines dinámicos actualizados. Reiniciando...");
-        delay(500);
-        ESP.restart();
+      if (payload.length() > 0) {
+        int commaCount = 0;
+        for (int i = 0; i < (int)payload.length(); i++) {
+          if (payload[i] == ',') commaCount++;
+        }
+        
+        // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck[,ledRgb]
+        int p[7];
+        p[0] = pinTofSda; p[1] = pinTofScl; p[2] = pinEncSda; p[3] = pinEncScl;
+        p[4] = pinHxDt; p[5] = pinHxSck; p[6] = pinLedRgb;
+        
+        int lastIndex = 0;
+        for (int i=0; i<7; i++) {
+          int commaIndex = payload.indexOf(',', lastIndex);
+          if (commaIndex == -1) {
+            if (lastIndex < (int)payload.length()) {
+              p[i] = payload.substring(lastIndex).toInt();
+            }
+            break;
+          } else {
+            p[i] = payload.substring(lastIndex, commaIndex).toInt();
+            lastIndex = commaIndex + 1;
+          }
+        }
+        
+        if (commaCount >= 5) { // Al menos 6 pines (5 comas)
+          pinTofSda = p[0]; pinTofScl = p[1];
+          pinEncSda = p[2]; pinEncScl = p[3];
+          pinHxDt = p[4]; pinHxSck = p[5];
+          if (commaCount >= 6) { // 7 pines (6 comas)
+            pinLedRgb = p[6];
+          }
+          saveSettings();
+          Serial.println("[CMD] Pines dinámicos actualizados. Reiniciando...");
+          delay(500);
+          ESP.restart();
+        }
       }
     }
     else if (msg == "USB_EXPORT") {
@@ -889,6 +934,18 @@ void setupAPI() {
     doc["config"]["tof_range"] = state.tofRange;
     doc["auth"]["leader_ip"] = currentLeaderIp;
     doc["auth"]["teacher_ip"] = currentTeacherIp;
+    
+    bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
+    doc["hardware"]["camera_detected"] = isCamProfile;
+    doc["hardware"]["type"] = isCamProfile ? "freenove_cam" : "standard_base";
+    doc["hardware"]["pins"]["tof_sda"] = pinTofSda;
+    doc["hardware"]["pins"]["tof_scl"] = pinTofScl;
+    doc["hardware"]["pins"]["enc_sda"] = pinEncSda;
+    doc["hardware"]["pins"]["enc_scl"] = pinEncScl;
+    doc["hardware"]["pins"]["hx_dt"] = pinHxDt;
+    doc["hardware"]["pins"]["hx_sck"] = pinHxSck;
+    doc["hardware"]["pins"]["led_rgb"] = pinLedRgb;
+    
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
@@ -915,7 +972,7 @@ void setupAPI() {
       {34, "34", "gpio"}, {35, "PSRAM_CLK", "psram"}, {36, "PSRAM_CS", "psram"}, {37, "PSRAM_D0", "psram"},
       {38, "38", "gpio"}, {39, "39", "gpio"}, {40, "40", "gpio"}, {41, "41", "gpio"},
       {42, "42", "gpio"}, {43, "TXD0/Debug", "uart"}, {44, "RXD0/Debug", "uart"},
-      {45, "45", "strap"}, {46, "46", "strap"}, {47, "47", "gpio"}, {48, "LED_RGB", "led"}
+      {45, "45", "strap"}, {46, "46", "strap"}, {47, "47", "gpio"}, {48, "48", "gpio"}
     };
     const int numPins = sizeof(allPins) / sizeof(allPins[0]);
     
@@ -958,6 +1015,9 @@ void setupAPI() {
       else if(gpioNum == pinEncScl) { pin["l"] = "ENC_SCL"; pin["f"] = "i2c"; }
       else if(gpioNum == pinHxDt) { pin["l"] = "HX_DT"; pin["f"] = "serial"; }
       else if(gpioNum == pinHxSck) { pin["l"] = "HX_SCK"; pin["f"] = "serial"; }
+      
+      // Mapear dinámicamente el LED RGB compilado actual
+      if (gpioNum == pinLedRgb) { pin["l"] = "LED_RGB"; pin["f"] = "led"; }
       
       // Lógica Failsafe: Bloquear digitalRead() en pines críticos de PSRAM, USB, UART, Strapping, Cámara o SD activa
       bool isSensitive = (gpioNum == 35 || gpioNum == 36 || gpioNum == 37 || // PSRAM
@@ -1255,6 +1315,9 @@ void runUsbExportMode() {
 void setup() {
   Serial.begin(115200);
   
+  // Cargar configuraciones del NVS al inicio para conocer los pines antes de inicializar hardware
+  loadSettings();
+  
   preferences.begin("physys", false);
   String bootMode = preferences.getString("boot_mode", "normal");
   
@@ -1262,7 +1325,7 @@ void setup() {
     preferences.putString("boot_mode", "normal");
     preferences.end();
     
-    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    initFastLED(pinLedRgb);
     
     // Inicializar PSRAM para buffer de alta velocidad
     if (psramInit()) {
@@ -1283,7 +1346,7 @@ void setup() {
   preferences.end();
 
   // LED de estado
-  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  initFastLED(pinLedRgb);
   FastLED.setBrightness(30);
 
   // Botón Factory Reset
@@ -1304,8 +1367,7 @@ void setup() {
     Serial.println("[FS] ERROR: No se pudo montar partición DATOS");
   }
 
-  // Configuración persistente
-  loadSettings();
+  // Configuración persistente ya cargada al inicio de setup()
 
   WiFi.mode(WIFI_AP);
   

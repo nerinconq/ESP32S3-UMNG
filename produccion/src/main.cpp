@@ -46,8 +46,9 @@ int pinEncSda = 10;
 int pinEncScl = 11;
 int pinHxDt = 6;
 int pinHxSck = 7;
-#define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove)
+#define LED_PIN        48   // GPIO48 — WS2812 onboard (Freenove / YD-ESP32S3)
 #define NUM_LEDS       1
+int pinLedRgb = LED_PIN;    // GPIO variable para LED dinámico (NVS persistente)
 #define FACTORY_RESET_PIN 0 // GPIO0 — BOOT button = Factory Reset (10s hold)
 
 // ═══════════════════════════════════════════════════════════════
@@ -147,7 +148,9 @@ struct SystemState {
   uint32_t samplesCount = 0;
   bool bufferFull = false;
   unsigned long lastSampleTime = 0;
+  unsigned long lastTofTime = 0;
   unsigned long measurementStartTime = 0;
+  int consecutiveGlitches = 0;
 } state;
 
 // Delay para asegurar guardado en NVS antes de reboot
@@ -169,6 +172,19 @@ void checkGlobalStop();
 // ═══════════════════════════════════════════════════════════════
 // SEMÁFORO LED (RMT via FastLED)
 // ═══════════════════════════════════════════════════════════════
+void initFastLED(int pin) {
+  switch (pin) {
+    case 48: FastLED.addLeds<WS2812, 48, GRB>(leds, NUM_LEDS); break;
+    case 38: FastLED.addLeds<WS2812, 38, GRB>(leds, NUM_LEDS); break;
+    case 21: FastLED.addLeds<WS2812, 21, GRB>(leds, NUM_LEDS); break;
+    case 8:  FastLED.addLeds<WS2812, 8,  GRB>(leds, NUM_LEDS); break;
+    case 2:  FastLED.addLeds<WS2812, 2,  GRB>(leds, NUM_LEDS); break;
+    case 18: FastLED.addLeds<WS2812, 18, GRB>(leds, NUM_LEDS); break;
+    case 47: FastLED.addLeds<WS2812, 47, GRB>(leds, NUM_LEDS); break;
+    default: FastLED.addLeds<WS2812, 48, GRB>(leds, NUM_LEDS); break;
+  }
+}
+
 void setLED(CRGB color) {
   leds[0] = color;
   FastLED.show();
@@ -190,7 +206,7 @@ void loadSettings() {
   preferences.begin("physys", true);
   currentToFModel = preferences.getString("tof_model", "vl53l0x");
   usbLogActive = preferences.getBool("usb_log", false);
-  sampleRateMs = preferences.getUInt("rate", 10); // Default 100Hz (10ms)
+  sampleRateMs = preferences.getInt("sample_rate", 10); // Default 100Hz (10ms)
   state.invertEncoder = preferences.getBool("inv_enc", false);
   state.useHxFilter = preferences.getBool("hx_filter", true);
   state.hxHighStability = preferences.getBool("hx_high_stab", false);
@@ -202,6 +218,7 @@ void loadSettings() {
   pinEncScl = preferences.getInt("pin_enc_scl", 11);
   pinHxDt = preferences.getInt("pin_hx_dt", 6);
   pinHxSck = preferences.getInt("pin_hx_sck", 7);
+  pinLedRgb = preferences.getInt("pin_led_rgb", LED_PIN);
   preferences.end();
   
   // Validaciones de seguridad - Forzar 10ms (100Hz) si no es válido o es la primera vez
@@ -265,6 +282,7 @@ void saveSettings() {
   preferences.putInt("pin_enc_scl", pinEncScl);
   preferences.putInt("pin_hx_dt", pinHxDt);
   preferences.putInt("pin_hx_sck", pinHxSck);
+  preferences.putInt("pin_led_rgb", pinLedRgb);
   preferences.end();
   Serial.println("[NVS] Guardado exitoso");
 }
@@ -276,13 +294,14 @@ void initSensors() {
   // Bus I2C #0 — ToF (Varios modelos)
   I2C_TOF.begin(pinTofSda, pinTofScl);
   I2C_TOF.setClock(400000);
-  I2C_TOF.setTimeOut(100); // Previene bloqueos por bus ocupado/flotante
+  I2C_TOF.setTimeOut(10); // Previene bloqueos por bus ocupado/flotante (10ms)
 
   state.tofReady = false;
   switch (activeToF) {
     case MODEL_L0X:
       tof0X.setBus(&I2C_TOF);
       if (tof0X.init()) {
+        tof0X.setTimeout(10); // Evitar bloqueos infinitos de la librería si se desconecta
         if (state.tofRange == "long") {
             // Habilitar perfil "Long Range" para alcanzar 2 metros
             tof0X.setSignalRateLimit(0.1);
@@ -290,35 +309,43 @@ void initSensors() {
             tof0X.setVcselPulsePeriod(VL53L0X::VcselPeriodFinalRange, 14);
         }
 
-        uint32_t budget = (sampleRateMs * 1000) - 2000;
+        uint32_t budgetUs = (sampleRateMs * 1000);
         if (state.tofRange == "long") {
-            // Mínimo recomendado para long range es 33000us, pero forzaremos mínimo 20000us para estabilidad
-            if (budget < 20000) budget = 20000; 
+            // Mínimo recomendado para long range en VL53L0X es 33000us para estabilidad
+            if (budgetUs < 33000) budgetUs = 33000; 
         } else {
-            if (budget < 10000) budget = 10000;
+            // ST prohíbe presupuestos menores de 20ms (20000us) en cualquier perfil
+            if (budgetUs < 20000) budgetUs = 20000;
         }
         
-        tof0X.setMeasurementTimingBudget(budget);
-        tof0X.startContinuous(sampleRateMs);
+        tof0X.setMeasurementTimingBudget(budgetUs);
+        // El período de inicio continuo debe ser al menos igual al presupuesto de tiempo (budgetUs / 1000)
+        uint32_t periodMs = budgetUs / 1000;
+        if (periodMs < (uint32_t)sampleRateMs) periodMs = sampleRateMs;
+        tof0X.startContinuous(periodMs);
         state.tofReady = true;
-        Serial.printf("[OK] VL53L0X (ToF) inicializado a %d ms (Modo %s)\n", sampleRateMs, state.tofRange == "long" ? "Long Range" : "Short Range");
+        Serial.printf("[OK] VL53L0X (ToF) inicializado a %d ms (Presupuesto: %u us, Modo %s)\n", periodMs, budgetUs, state.tofRange == "long" ? "Long Range" : "Short Range");
       }
       break;
     case MODEL_L1X:
     case MODEL_L1X_V2:
       tof1X.setBus(&I2C_TOF);
       if (tof1X.init()) {
+        tof1X.setTimeout(10); // Evitar bloqueos infinitos
         if (sampleRateMs <= 20) {
           tof1X.setDistanceMode(VL53L1X::Short);
         } else {
           tof1X.setDistanceMode(VL53L1X::Long);
         }
-        uint32_t budget = (sampleRateMs * 1000);
-        if (budget < 15000) budget = 15000; 
-        tof1X.setMeasurementTimingBudget(budget);
-        tof1X.startContinuous(sampleRateMs);
+        uint32_t budgetUs = (sampleRateMs * 1000);
+        if (budgetUs < 15000) budgetUs = 15000; 
+        tof1X.setMeasurementTimingBudget(budgetUs);
+        
+        uint32_t periodMs = budgetUs / 1000;
+        if (periodMs < (uint32_t)sampleRateMs) periodMs = sampleRateMs;
+        tof1X.startContinuous(periodMs);
         state.tofReady = true;
-        Serial.printf("[OK] VL53L1X inicializado a %d ms (Budget: %d us)\n", sampleRateMs, budget);
+        Serial.printf("[OK] VL53L1X inicializado a %d ms (Budget: %d us)\n", periodMs, budgetUs);
       } else {
         Serial.println("[ERR] Fallo al inicializar VL53L1X");
       }
@@ -350,7 +377,7 @@ void initSensors() {
   // AS5600 (Encoder Magnético) en Bus 1
   I2C_ENC.begin(pinEncSda, pinEncScl);
   I2C_ENC.setClock(400000);
-  I2C_ENC.setTimeOut(100); // Previene bloqueos por bus ocupado/flotante
+  I2C_ENC.setTimeOut(10); // Previene bloqueos por bus ocupado/flotante (10ms)
   encoder.begin(255); 
   if (encoder.isConnected()) {
     state.encoderReady = true;
@@ -376,76 +403,107 @@ void initSensors() {
 // ═══════════════════════════════════════════════════════════════
 void readSensors() {
   unsigned long now = millis();
+  
+  // Relajar la tasa de loop en reposo (cuando no se mide ni se espera disparo) a 50 ms (20 Hz) para dar respiro al CPU
+  unsigned long activeInterval = (state.measuring || state.isWaitingForTrigger) ? sampleRateMs : 50;
   float dt = (now - state.lastSampleTime) / 1000.0; // segundos
-  if (dt < (sampleRateMs * 0.4) / 1000.0) return; 
+  if (dt < (activeInterval * 0.4) / 1000.0) return; 
 
-  if (state.tofReady) {
+  static unsigned long lastTofCheck = 0;
+  bool shouldCheckTof = false;
+  if (state.tofReady && (now - lastTofCheck >= 20)) { // Limitar chequeo de ToF por I2C a máximo 50 Hz (cada 20 ms)
+    lastTofCheck = now;
+    shouldCheckTof = true;
+  }
+
+  if (state.tofReady && shouldCheckTof) {
     float dist = 0;
     bool timeout = false;
+    bool newTofData = false;
     
     if (activeToF == MODEL_L0X) {
-      dist = tof0X.readRangeContinuousMillimeters();
-      timeout = tof0X.timeoutOccurred();
+      if ((tof0X.readReg(VL53L0X::RESULT_INTERRUPT_STATUS) & 0x07) != 0) {
+        dist = tof0X.readRangeContinuousMillimeters();
+        timeout = tof0X.timeoutOccurred();
+        newTofData = true;
+      }
     } else if (activeToF == MODEL_L1X || activeToF == MODEL_L1X_V2) {
-      dist = tof1X.readRangeContinuousMillimeters();
-      timeout = tof1X.timeoutOccurred();
+      if (tof1X.dataReady()) {
+        dist = tof1X.readRangeContinuousMillimeters(false);
+        timeout = tof1X.timeoutOccurred();
+        newTofData = true;
+      }
     } else if (activeToF == MODEL_6180) {
       dist = tof6180.readRangeSingleMillimeters();
+      newTofData = true;
     } else if (activeToF == MODEL_L5CX) {
       if (tof5CX.isDataReady()) {
         VL53L5CX_ResultsData data;
         if (tof5CX.getRangingData(&data)) {
           dist = data.distance_mm[0]; 
+          newTofData = true;
         }
       }
     }
 
-    if (!timeout) {
-      // FILTRO ANTI-8190: Si el sensor pierde el objeto (>8000), ignorar la lectura.
-      // Conservamos el último valor válido para evitar saltos/escalones en la gráfica.
-      // La parada de seguridad en Auto usa el valor crudo (dist) más abajo.
+    if (newTofData && !timeout) {
+      // FILTRO ANTI-8190: Si el sensor pierde el objeto (>8000), ignorar la lectura para la cinemática.
+      // Conservamos el último valor válido en la gráfica, pero contamos el glitch si estamos midiendo.
       if (dist < 8000) {
         state.prevDistance = state.lastDistance;
         state.lastDistance = dist;
+        state.consecutiveGlitches = 0; // Resetear glitches al recibir dato válido
+      } else {
+        if (state.measuring) {
+          state.consecutiveGlitches++;
+        }
       }
 
+      // Lógica de disparo y parada automática optimizada
       if (state.triggerEnabled && state.isWaitingForTrigger) {
-        if (abs(state.lastDistance - state.initialDistance) >= state.triggerThreshold) {
+        // Etapa de preparación: objeto posicionado cerca del sensor (entre 5.0 mm y 100.0 mm)
+        if (state.lastDistance >= 5.0 && state.lastDistance <= 100.0) {
+          // Si la posición es estable (variación <= 10 mm), calibramos continuamente la referencia inicial
+          if (abs(state.lastDistance - state.prevDistance) <= 10.0) {
+            state.initialDistance = state.lastDistance;
+            setLED(CRGB::Orange); // Mantener LED naranja
+          }
+        }
+        
+        // Disparo: si tenemos una calibración estable previa y el objeto se suelta (cae alejándose, la distancia aumenta 15 mm)
+        if (state.initialDistance >= 5.0 && state.initialDistance <= 100.0 && state.lastDistance >= (state.initialDistance + 15.0)) {
           state.isWaitingForTrigger = false;
           state.measuring = true;
           state.measurementStartTime = millis();
           state.tofMeasure.active = true;
           state.encMeasure.active = true;
           state.hxMeasure.active = true;
+          state.consecutiveGlitches = 0;
           setLED(CRGB::Blue);
           resetBuffer();
           ws.textAll("{\"command\":\"TRIGGER_START\",\"t\":0}");
-          Serial.println("[AUTO] ¡Movimiento detectado!");
+          Serial.printf("[AUTO] ¡Caída libre detectada! Disparo a %.1f mm (inicial estable: %.1f mm)\n", state.lastDistance, state.initialDistance);
         }
       } 
       else if (state.measuring) {
-        float stopDist = (state.triggerEnabled && state.tubeLength > 0) ? state.tubeLength : state.distMax;
         bool shouldStop = false;
         
         if (state.triggerEnabled) {
-            // Lógica de parada inteligente (Solo modo Automático)
-            // 1. Si el objeto se ALEJA: detener en el largo del tubo
-            if (state.initialDistance < stopDist) {
-                if (state.lastDistance >= stopDist) shouldStop = true;
-            } 
-            // 2. Si el objeto BAJA: detener 1cm antes de la zona muerta
-            else {
-                if (state.lastDistance <= (state.distMin - 10)) shouldStop = true;
-            }
-            
-            // 3. SEGURIDAD: Si el sensor manda error (perdió el objeto), detener toma
-            if (!shouldStop && dist >= 8000) {
-                shouldStop = true;
-                Serial.println("[AUTO] Señal perdida o fuera de rango. Deteniendo.");
-            }
-
-            // 4. Límite físico
-            if (!shouldStop && state.lastDistance >= state.distMax) shouldStop = true;
+          // Detener automáticamente 30 mm antes de chocar contra el suelo (suelo a tubeLength)
+          if (state.tubeLength > 0 && state.lastDistance >= (state.tubeLength - 30.0)) {
+            shouldStop = true;
+            Serial.printf("[AUTO] Detención preventiva 30mm antes del suelo. Suelo: %.1f mm, Objeto: %.1f mm\n", state.tubeLength, state.lastDistance);
+          }
+          // Límite físico de seguridad
+          else if (state.lastDistance >= state.distMax) {
+            shouldStop = true;
+            Serial.println("[AUTO] Parada por distancia máxima física alcanzada.");
+          }
+          // Señal perdida o fuera de rango acumulada (glitch filter: 5 lecturas consecutivas >= 8000)
+          else if (state.consecutiveGlitches >= 5) {
+            shouldStop = true;
+            Serial.println("[AUTO] Parada por pérdida de señal sostenida (5 glitches consecutivos).");
+          }
         }
         
         if (shouldStop) {
@@ -460,33 +518,19 @@ void readSensors() {
         }
       }
 
-      if (dt > 0 && state.lastSampleTime > 0) {
-        float newVel = (state.lastDistance - state.prevDistance) / (dt * 1000.0); 
-        state.lastAccel = (newVel - state.lastVelocity) / dt; 
-        state.prevVelocity = state.lastVelocity;
-        state.lastVelocity = newVel;
-      }
-
-      if (state.measuring && highSpeedBuffer) {
-        highSpeedBuffer[bufferIndex] = {
-          (uint32_t)(millis() - state.measurementStartTime),
-          state.lastDistance,
-          state.lastVelocity,
-          state.lastWeight,
-          state.lastAngleDeg
-        };
-        
-        bufferIndex++;
-        if (bufferIndex >= MAX_SAMPLES) {
-            bufferIndex = 0;
-            state.bufferFull = true;
+      // Cinemática lineal basada en tiempo de ToF real
+      unsigned long tofNow = millis();
+      if (state.lastTofTime > 0) {
+        float tofDt = (tofNow - state.lastTofTime) / 1000.0;
+        if (tofDt > 0.005) { // al menos 5 ms entre muestras de ToF
+          float newVel = (state.lastDistance - state.prevDistance) / (tofDt * 1000.0); 
+          state.lastAccel = (newVel - state.lastVelocity) / tofDt; 
+          state.prevVelocity = state.lastVelocity;
+          state.lastVelocity = newVel;
+          state.lastTofTime = tofNow;
         }
-        
-        if (!state.bufferFull) {
-            state.samplesCount = bufferIndex;
-        } else {
-            state.samplesCount = MAX_SAMPLES;
-        }
+      } else {
+        state.lastTofTime = tofNow;
       }
     }
   }
@@ -535,6 +579,28 @@ void readSensors() {
     }
   }
 
+  if (state.measuring && highSpeedBuffer) {
+    highSpeedBuffer[bufferIndex] = {
+      (uint32_t)(millis() - state.measurementStartTime),
+      state.lastDistance,
+      state.lastVelocity,
+      state.lastWeight,
+      state.lastAngleDeg
+    };
+    
+    bufferIndex++;
+    if (bufferIndex >= MAX_SAMPLES) {
+        bufferIndex = 0;
+        state.bufferFull = true;
+    }
+    
+    if (!state.bufferFull) {
+        state.samplesCount = bufferIndex;
+    } else {
+        state.samplesCount = MAX_SAMPLES;
+    }
+  }
+
   state.lastSampleTime = now;
 }
 
@@ -557,6 +623,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     doc["sensors"]["usb"] = usbConnected;
     doc["config"]["trigger_enabled"] = state.triggerEnabled;
     doc["config"]["tube_length"] = state.tubeLength;
+    
+    bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
+    doc["hardware"]["camera_detected"] = isCamProfile;
+    doc["hardware"]["type"] = isCamProfile ? "freenove_cam" : "standard_base";
+    doc["hardware"]["pins"]["tof_sda"] = pinTofSda;
+    doc["hardware"]["pins"]["tof_scl"] = pinTofScl;
+    doc["hardware"]["pins"]["enc_sda"] = pinEncSda;
+    doc["hardware"]["pins"]["enc_scl"] = pinEncScl;
+    doc["hardware"]["pins"]["hx_dt"] = pinHxDt;
+    doc["hardware"]["pins"]["hx_sck"] = pinHxSck;
+    doc["hardware"]["pins"]["led_rgb"] = pinLedRgb;
+    
     String json;
     serializeJson(doc, json);
     client->text(json);
@@ -676,6 +754,42 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         saveSettings();
         Serial.printf("[CMD] Frecuencia de muestreo cambiada a: %d ms\n", sampleRateMs);
         ws.textAll("{\"config\":{\"sample_rate\":" + String(sampleRateMs) + "}}");
+
+        // Reconfiguración en caliente del sensor ToF activo
+        if (state.tofReady) {
+          if (activeToF == MODEL_L0X) {
+            tof0X.stopContinuous();
+            uint32_t budget = (sampleRateMs * 1000) - 2000;
+            if (state.tofRange == "long") {
+              if (budget < 33000) budget = 33000; 
+            } else {
+              if (budget < 20000) budget = 20000;
+            }
+            tof0X.setMeasurementTimingBudget(budget);
+            tof0X.startContinuous(sampleRateMs);
+            Serial.printf("[HOT-CONFIG] VL53L0X reconfigurado: timing budget = %u us, rate = %d ms\n", budget, sampleRateMs);
+          } else if (activeToF == MODEL_L1X || activeToF == MODEL_L1X_V2) {
+            tof1X.stopContinuous();
+            if (sampleRateMs <= 20) {
+              tof1X.setDistanceMode(VL53L1X::Short);
+            } else {
+              tof1X.setDistanceMode(VL53L1X::Long);
+            }
+            uint32_t budget = (sampleRateMs * 1000);
+            if (budget < 15000) budget = 15000; 
+            tof1X.setMeasurementTimingBudget(budget);
+            tof1X.startContinuous(sampleRateMs);
+            Serial.printf("[HOT-CONFIG] VL53L1X reconfigurado: timing budget = %u us, rate = %d ms\n", budget, sampleRateMs);
+          } else if (activeToF == MODEL_L5CX) {
+            tof5CX.stopRanging();
+            int freq = 1000 / sampleRateMs;
+            if (freq > 15) freq = 15;
+            if (freq < 1) freq = 1;
+            tof5CX.setRangingFrequency(freq);
+            tof5CX.startRanging();
+            Serial.printf("[HOT-CONFIG] VL53L5CX reconfigurado: freq = %d Hz\n", freq);
+          }
+        }
       }
     }
     else if (msg.startsWith("SET_PINS:")) {
@@ -683,26 +797,43 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       if (currentTeacherIp != clientIp) return; // SOLO DOCENTE (Líder NO puede reasignar pines de hardware)
       
       String payload = msg.substring(9);
-      // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck
-      int p[6];
-      int lastIndex = 0;
-      for (int i=0; i<6; i++) {
-        int commaIndex = payload.indexOf(',', lastIndex);
-        if (commaIndex == -1 && i == 5) commaIndex = payload.length();
-        if (commaIndex != -1) {
-          p[i] = payload.substring(lastIndex, commaIndex).toInt();
-          lastIndex = commaIndex + 1;
-        } else { p[i] = -1; }
-      }
-      
-      if (p[0] != -1) {
-        pinTofSda = p[0]; pinTofScl = p[1];
-        pinEncSda = p[2]; pinEncScl = p[3];
-        pinHxDt = p[4]; pinHxSck = p[5];
-        saveSettings();
-        Serial.println("[CMD] Pines dinámicos actualizados. Reiniciando...");
-        delay(500);
-        ESP.restart();
+      if (payload.length() > 0) {
+        int commaCount = 0;
+        for (int i = 0; i < (int)payload.length(); i++) {
+          if (payload[i] == ',') commaCount++;
+        }
+        
+        // Formato: tofSda,tofScl,encSda,encScl,hxDt,hxSck[,ledRgb]
+        int p[7];
+        p[0] = pinTofSda; p[1] = pinTofScl; p[2] = pinEncSda; p[3] = pinEncScl;
+        p[4] = pinHxDt; p[5] = pinHxSck; p[6] = pinLedRgb;
+        
+        int lastIndex = 0;
+        for (int i=0; i<7; i++) {
+          int commaIndex = payload.indexOf(',', lastIndex);
+          if (commaIndex == -1) {
+            if (lastIndex < (int)payload.length()) {
+              p[i] = payload.substring(lastIndex).toInt();
+            }
+            break;
+          } else {
+            p[i] = payload.substring(lastIndex, commaIndex).toInt();
+            lastIndex = commaIndex + 1;
+          }
+        }
+        
+        if (commaCount >= 5) { // Al menos 6 pines (5 comas)
+          pinTofSda = p[0]; pinTofScl = p[1];
+          pinEncSda = p[2]; pinEncScl = p[3];
+          pinHxDt = p[4]; pinHxSck = p[5];
+          if (commaCount >= 6) { // 7 pines (6 comas)
+            pinLedRgb = p[6];
+          }
+          saveSettings();
+          Serial.println("[CMD] Pines dinámicos actualizados. Reiniciando...");
+          delay(500);
+          ESP.restart();
+        }
       }
     }
     else if (msg == "USB_EXPORT") {
@@ -759,11 +890,7 @@ void checkGlobalStop() {
 }
 
 void broadcastSensorData() {
-  static unsigned long lastBroadcast = 0;
-  unsigned long now = millis();
-  
-  if (ws.count() == 0 || !state.measuring || (now - lastBroadcast < 33)) return;
-  lastBroadcast = now;
+  if (ws.count() == 0 || !state.measuring) return;
 
   JsonDocument doc;
   doc["t"] = millis() - state.measurementStartTime; 
@@ -777,19 +904,6 @@ void broadcastSensorData() {
   doc["weight"] = state.lastWeight;            
   doc["mass"] = state.lastWeight / 1000.0;     
   doc["weightN"] = (state.lastWeight / 1000.0) * 9.81; 
-  doc["sensors"]["tof"] = state.tofReady;
-  doc["sensors"]["encoder"] = state.encoderReady;
-  doc["sensors"]["loadcell"] = state.loadCellReady;
-  doc["sensors"]["usb"] = usbConnected;
-  doc["config"]["trigger_enabled"] = state.triggerEnabled;
-  doc["config"]["waiting_trigger"] = state.isWaitingForTrigger;
-  doc["config"]["tof_model"] = currentToFModel;
-  doc["config"]["usb_log"] = usbLogActive;
-  doc["config"]["sample_rate"] = sampleRateMs;
-  doc["config"]["hx_filter"] = state.useHxFilter;
-  doc["config"]["hx_high_stab"] = state.hxHighStability;
-  doc["config"]["tube_length"] = state.tubeLength;
-  doc["config"]["tof_range"] = state.tofRange;
 
   String json;
   serializeJson(doc, json);
@@ -820,6 +934,18 @@ void setupAPI() {
     doc["config"]["tof_range"] = state.tofRange;
     doc["auth"]["leader_ip"] = currentLeaderIp;
     doc["auth"]["teacher_ip"] = currentTeacherIp;
+    
+    bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
+    doc["hardware"]["camera_detected"] = isCamProfile;
+    doc["hardware"]["type"] = isCamProfile ? "freenove_cam" : "standard_base";
+    doc["hardware"]["pins"]["tof_sda"] = pinTofSda;
+    doc["hardware"]["pins"]["tof_scl"] = pinTofScl;
+    doc["hardware"]["pins"]["enc_sda"] = pinEncSda;
+    doc["hardware"]["pins"]["enc_scl"] = pinEncScl;
+    doc["hardware"]["pins"]["hx_dt"] = pinHxDt;
+    doc["hardware"]["pins"]["hx_sck"] = pinHxSck;
+    doc["hardware"]["pins"]["led_rgb"] = pinLedRgb;
+    
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
@@ -837,33 +963,80 @@ void setupAPI() {
     JsonDocument doc;
     struct PinInfo { int gpio; const char* label; const char* fn; };
     PinInfo allPins[] = {
-      {0, "BOOT/0", "boot"}, {1, "1", "gpio"}, {2, "2", "gpio"}, {3, "3", "gpio"}, 
+      {0, "BOOT/0", "boot"}, {1, "1", "gpio"}, {2, "LED_ON/2", "strap"}, {3, "3", "gpio"}, 
       {4, "4", "gpio"}, {5, "5", "gpio"}, {6, "6", "gpio"}, {7, "7", "gpio"},
       {8, "8", "gpio"}, {9, "9", "gpio"}, {10, "10", "gpio"}, {11, "11", "gpio"},
       {12, "12", "gpio"}, {13, "13", "gpio"}, {14, "14", "gpio"}, {15, "15", "gpio"},
-      {16, "16", "gpio"}, {17, "17", "gpio"}, {18, "18", "gpio"}, {21, "21", "gpio"},
-      {26, "26", "gpio"}, {38, "38", "gpio"}, {39, "39", "gpio"}, {40, "40", "gpio"}, 
-      {41, "41", "gpio"}, {42, "42", "gpio"}, {43, "43", "TX"}, {44, "44", "RX"}, 
-      {45, "45", "gpio"}, {46, "46", "gpio"}, {47, "47", "gpio"}, {48, "48", "led"}
+      {16, "16", "gpio"}, {17, "17", "gpio"}, {18, "18", "gpio"}, {19, "USB_D-", "usb"},
+      {20, "USB_D+", "usb"}, {21, "21", "gpio"}, {26, "26", "gpio"}, {33, "33", "gpio"},
+      {34, "34", "gpio"}, {35, "PSRAM_CLK", "psram"}, {36, "PSRAM_CS", "psram"}, {37, "PSRAM_D0", "psram"},
+      {38, "38", "gpio"}, {39, "39", "gpio"}, {40, "40", "gpio"}, {41, "41", "gpio"},
+      {42, "42", "gpio"}, {43, "TXD0/Debug", "uart"}, {44, "RXD0/Debug", "uart"},
+      {45, "45", "strap"}, {46, "46", "strap"}, {47, "47", "gpio"}, {48, "48", "gpio"}
     };
     const int numPins = sizeof(allPins) / sizeof(allPins[0]);
+    
+    // Detectar si el perfil Cámara está activo en base a la asignación de pines ToF en NVS
+    bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
     
     JsonArray arr = doc["pins"].to<JsonArray>();
     for (int i = 0; i < numPins; i++) {
       JsonObject pin = arr.add<JsonObject>();
-      pin["g"] = allPins[i].gpio;
+      int gpioNum = allPins[i].gpio;
+      pin["g"] = gpioNum;
       pin["l"] = allPins[i].label;
       pin["f"] = allPins[i].fn;
       
-      // Sobrescribir labels si el pin está asignado dinámicamente
-      if(allPins[i].gpio == pinTofSda) { pin["l"] = "TOF_SDA"; pin["f"] = "i2c"; }
-      else if(allPins[i].gpio == pinTofScl) { pin["l"] = "TOF_SCL"; pin["f"] = "i2c"; }
-      else if(allPins[i].gpio == pinEncSda) { pin["l"] = "ENC_SDA"; pin["f"] = "i2c"; }
-      else if(allPins[i].gpio == pinEncScl) { pin["l"] = "ENC_SCL"; pin["f"] = "i2c"; }
-      else if(allPins[i].gpio == pinHxDt) { pin["l"] = "HX_DT"; pin["f"] = "serial"; }
-      else if(allPins[i].gpio == pinHxSck) { pin["l"] = "HX_SCK"; pin["f"] = "serial"; }
+      // Sobrescribir dinámicamente etiquetas del Perfil Cámara y SD Card
+      if (isCamProfile) {
+        if (gpioNum == 4) { pin["l"] = "CAM_SDA"; pin["f"] = "cam"; }
+        else if (gpioNum == 5) { pin["l"] = "CAM_SCL"; pin["f"] = "cam"; }
+        else if (gpioNum == 6) { pin["l"] = "CAM_VSYNC"; pin["f"] = "cam"; }
+        else if (gpioNum == 7) { pin["l"] = "CAM_HREF"; pin["f"] = "cam"; }
+        else if (gpioNum == 8) { pin["l"] = "CAM_Y4"; pin["f"] = "cam"; }
+        else if (gpioNum == 9) { pin["l"] = "CAM_Y3"; pin["f"] = "cam"; }
+        else if (gpioNum == 10) { pin["l"] = "CAM_Y5"; pin["f"] = "cam"; }
+        else if (gpioNum == 11) { pin["l"] = "CAM_Y2"; pin["f"] = "cam"; }
+        else if (gpioNum == 12) { pin["l"] = "CAM_Y6"; pin["f"] = "cam"; }
+        else if (gpioNum == 13) { pin["l"] = "CAM_PCLK"; pin["f"] = "cam"; }
+        else if (gpioNum == 15) { pin["l"] = "CAM_XCLK"; pin["f"] = "cam"; }
+        else if (gpioNum == 16) { pin["l"] = "CAM_Y9"; pin["f"] = "cam"; }
+        else if (gpioNum == 17) { pin["l"] = "CAM_Y8"; pin["f"] = "cam"; }
+        else if (gpioNum == 18) { pin["l"] = "CAM_Y7"; pin["f"] = "cam"; }
+        else if (gpioNum == 38) { pin["l"] = "SD_CMD"; pin["f"] = "sd"; }
+        else if (gpioNum == 39) { pin["l"] = "SD_CLK"; pin["f"] = "sd"; }
+        else if (gpioNum == 40) { pin["l"] = "SD_DATA"; pin["f"] = "sd"; }
+      }
       
-      pin["v"] = digitalRead(allPins[i].gpio);
+      // Sobrescribir labels si el pin está asignado dinámicamente a algún sensor
+      if(gpioNum == pinTofSda) { pin["l"] = "TOF_SDA"; pin["f"] = "i2c"; }
+      else if(gpioNum == pinTofScl) { pin["l"] = "TOF_SCL"; pin["f"] = "i2c"; }
+      else if(gpioNum == pinEncSda) { pin["l"] = "ENC_SDA"; pin["f"] = "i2c"; }
+      else if(gpioNum == pinEncScl) { pin["l"] = "ENC_SCL"; pin["f"] = "i2c"; }
+      else if(gpioNum == pinHxDt) { pin["l"] = "HX_DT"; pin["f"] = "serial"; }
+      else if(gpioNum == pinHxSck) { pin["l"] = "HX_SCK"; pin["f"] = "serial"; }
+      
+      // Mapear dinámicamente el LED RGB compilado actual
+      if (gpioNum == pinLedRgb) { pin["l"] = "LED_RGB"; pin["f"] = "led"; }
+      
+      // Lógica Failsafe: Bloquear digitalRead() en pines críticos de PSRAM, USB, UART, Strapping, Cámara o SD activa
+      bool isSensitive = (gpioNum == 35 || gpioNum == 36 || gpioNum == 37 || // PSRAM
+                          gpioNum == 19 || gpioNum == 20 ||                  // USB OTG
+                          gpioNum == 43 || gpioNum == 44 ||                  // UART
+                          gpioNum == 0  || gpioNum == 45 || gpioNum == 46 ||  // Strapping
+                          (isCamProfile && (gpioNum == 4 || gpioNum == 5 || gpioNum == 6 || 
+                                            gpioNum == 7 || gpioNum == 8 || gpioNum == 9 || 
+                                            gpioNum == 10 || gpioNum == 11 || gpioNum == 12 || 
+                                            gpioNum == 13 || gpioNum == 15 || gpioNum == 16 || 
+                                            gpioNum == 17 || gpioNum == 18 || gpioNum == 38 || 
+                                            gpioNum == 39 || gpioNum == 40)));
+      
+      if (isSensitive) {
+        // Pines de PSRAM o USB nativo usualmente leen HIGH, pero retornamos estado lógico 0 estático por seguridad
+        pin["v"] = 0; 
+      } else {
+        pin["v"] = digitalRead(gpioNum);
+      }
     }
     doc["heap"] = ESP.getFreeHeap();
     doc["t"] = millis();
@@ -1142,6 +1315,9 @@ void runUsbExportMode() {
 void setup() {
   Serial.begin(115200);
   
+  // Cargar configuraciones del NVS al inicio para conocer los pines antes de inicializar hardware
+  loadSettings();
+  
   preferences.begin("physys", false);
   String bootMode = preferences.getString("boot_mode", "normal");
   
@@ -1149,7 +1325,7 @@ void setup() {
     preferences.putString("boot_mode", "normal");
     preferences.end();
     
-    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+    initFastLED(pinLedRgb);
     
     // Inicializar PSRAM para buffer de alta velocidad
     if (psramInit()) {
@@ -1170,7 +1346,7 @@ void setup() {
   preferences.end();
 
   // LED de estado
-  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  initFastLED(pinLedRgb);
   FastLED.setBrightness(30);
 
   // Botón Factory Reset
@@ -1191,8 +1367,7 @@ void setup() {
     Serial.println("[FS] ERROR: No se pudo montar partición DATOS");
   }
 
-  // Configuración persistente
-  loadSettings();
+  // Configuración persistente ya cargada al inicio de setup()
 
   WiFi.mode(WIFI_AP);
   
@@ -1280,7 +1455,14 @@ unsigned long lastBroadcast = 0;
 
 void loop() {
   dnsServer.processNextRequest();
-  ws.cleanupClients();
+  
+  // Limitar cleanupClients a 1 vez por segundo para evitar saturar la CPU y la red
+  static unsigned long lastCleanup = 0;
+  if (millis() - lastCleanup > 1000) {
+    ws.cleanupClients();
+    lastCleanup = millis();
+  }
+  
   checkFactoryReset();
   usbConnected = usbHost.isConnected();
 
