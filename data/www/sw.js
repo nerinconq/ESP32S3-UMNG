@@ -1,6 +1,6 @@
-/* Physys Lab — Service Worker (Offline First) */
+/* Physys Lab — Service Worker (Network First + Offline Fallback) */
 
-const CACHE_NAME = 'physys-v9.0';
+const CACHE_NAME = 'physys-V_1_16_07_26-1784263306';
 const CACHE_FILES = [
     '/',
     '/index.html',
@@ -30,32 +30,35 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch: cache-first for static assets, network-first for API
+// Fetch: NETWORK-FIRST for everything (static + API)
+// Tries to get fresh content from ESP32; falls back to cache if offline
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // API calls: always network
-    if (url.pathname.startsWith('/api/')) {
-        event.respondWith(
-            fetch(event.request).catch(() =>
-                new Response(JSON.stringify({ error: 'offline' }),
-                    { headers: { 'Content-Type': 'application/json' } })
-            )
-        );
-        return;
-    }
+    // WebSocket and non-GET: pass through
+    if (event.request.method !== 'GET') return;
 
-    // Static assets: cache-first
     event.respondWith(
-        caches.match(event.request).then(cached => {
-            if (cached) return cached;
-            return fetch(event.request).then(response => {
+        fetch(event.request)
+            .then(response => {
+                // Got fresh response — update cache
                 if (response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
                 }
                 return response;
-            });
-        })
+            })
+            .catch(() => {
+                // Network failed — serve from cache (offline mode)
+                return caches.match(event.request).then(cached => {
+                    if (cached) return cached;
+                    // API calls return JSON error
+                    if (url.pathname.startsWith('/api/')) {
+                        return new Response(JSON.stringify({ error: 'offline' }),
+                            { headers: { 'Content-Type': 'application/json' } });
+                    }
+                    return new Response('Offline', { status: 503 });
+                });
+            })
     );
 });

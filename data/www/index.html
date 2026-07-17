@@ -190,16 +190,91 @@
                                 <span class="sensor-icon">📏</span>
                                 <h3>Sensor de Posición (ToF)</h3>
                             </div>
-                            <p class="config-desc" id="tof_model_desc">Modelo conectado al I2C #0 (GPIO 4/5).</p>
+                            <p class="config-desc" id="tof_model_desc">Configura qué sensor hay en cada bus I2C.</p>
                             
-                            <label class="config-label">Modelo de Sensor</label>
-                            <select id="tof_model" class="select-premium full-width" onchange="updateToFUI()">
-                                <option value="vl53l0x">VL53L0X (Básico — 2m)</option>
-                                <option value="vl53l1x">VL53L1X (Largo alcance — 4m)</option>
-                                <option value="vl53l1xv2">VL53L1X v2 (Largo alcance — 4m)</option>
-                                <option value="vl6180">VL6180X (Corto alcance — 60cm)</option>
-                                <option value="vl53l5x">VL53L5CX (Multizona — 8x8)</option>
-                            </select>
+                            <button class="btn-premium" onclick="sendWS('SCAN_BUS')" style="margin-bottom:12px;width:100%">🔍 Escanear Buses I2C</button>
+                            
+                            <!-- Bus 0 -->
+                            <div class="config-card" style="padding:10px;margin-bottom:10px;border-left:3px solid #4fc3f7">
+                                <div style="display:flex;justify-content:space-between;align-items:center">
+                                    <strong id="bus0_header">Bus 0</strong> <span id="bus0_subtitle" style="font-size:0.8em;color:#aaa">GPIO 4 (SDA) / 5 (SCL)</span>
+                                </div>
+                                <div id="bus0_detect" style="font-size:0.85em;color:#888;margin:4px 0">⏳ Sin escanear</div>
+                                <label class="config-label" style="margin-top:6px">Magnitud</label>
+                                <select id="bus0_mag" class="select-premium full-width" onchange="onBusMagChange(0)">
+                                    <option value="none">Ninguno</option>
+                                    <option value="distance">Distancia</option>
+                                    <option value="weight">Dinámica (Peso)</option>
+                                    <option value="angle">Ángulo</option>
+                                </select>
+                                <div id="bus0_sensor_wrap" style="display:none;margin-top:6px">
+                                    <label class="config-label">Sensor</label>
+                                    <select id="bus0_sensor" class="select-premium full-width" onchange="onBusSensorChange(0)"></select>
+                                    <div id="bus0_volt" style="font-size:0.8em;margin-top:3px"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Bus 1 -->
+                            <div class="config-card" style="padding:10px;margin-bottom:10px;border-left:3px solid #ab47bc">
+                                <div style="display:flex;justify-content:space-between;align-items:center">
+                                    <strong id="bus1_header">Bus 1</strong> <span id="bus1_subtitle" style="font-size:0.8em;color:#aaa">GPIO 10 (SDA) / 11 (SCL)</span>
+                                </div>
+                                <div id="bus1_detect" style="font-size:0.85em;color:#888;margin:4px 0">⏳ Sin escanear</div>
+                                <label class="config-label" style="margin-top:6px">Magnitud</label>
+                                <select id="bus1_mag" class="select-premium full-width" onchange="onBusMagChange(1)">
+                                    <option value="none">Ninguno</option>
+                                    <option value="distance">Distancia</option>
+                                    <option value="weight">Dinámica (Peso)</option>
+                                    <option value="angle">Ángulo</option>
+                                </select>
+                                <div id="bus1_sensor_wrap" style="display:none;margin-top:6px">
+                                    <label class="config-label">Sensor</label>
+                                    <select id="bus1_sensor" class="select-premium full-width" onchange="onBusSensorChange(1)"></select>
+                                    <div id="bus1_volt" style="font-size:0.8em;margin-top:3px"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Pines HX711 / UART -->
+                            <div class="config-card" style="padding:10px;margin-bottom:10px;border-left:3px solid #66bb6a">
+                                <div style="display:flex;justify-content:space-between;align-items:center">
+                                    <strong id="pin67_header">GPIO 6/7</strong> <span id="pin67_subtitle" style="font-size:0.8em;color:#aaa">HX711 o UART</span>
+                                </div>
+                                <div id="hx_uart_status" style="font-size:0.85em;color:#888;margin:4px 0">⏳ Sin escanear</div>
+                                
+                                <label class="config-label" style="margin-top:6px">Modo de Pines</label>
+                                <select id="pin67_mode" class="select-premium full-width" onchange="onPin67ModeChange()">
+                                    <option value="none">Ninguno (Libres)</option>
+                                    <option value="hx711">Celda de Carga (HX711)</option>
+                                    <option value="uart">Sensor UART (LiDAR)</option>
+                                </select>
+                                
+                                <div id="uart_sensor_wrap" style="display:none;margin-top:6px">
+                                    <label class="config-label">Sensor UART</label>
+                                    <select id="uart_sensor" class="select-premium full-width" onchange="onUartSensorChange()">
+                                        <option value="none">Ninguno</option>
+                                        <option value="back">Volver anterior</option>
+                                        <option value="tofsense">TOFSense LiDAR (UART — 25m)</option>
+                                        <option value="tfmini_s">TFmini-S LiDAR (UART — 12m)</option>
+                                    </select>
+                                    <div id="uart_volt" style="font-size:0.85em;margin-top:3px"></div>
+                                </div>
+                            </div>
+
+                            <div style="display:none">
+                                <label class="config-label">Sensor Activo (resultado)</label>
+                                <select id="tof_model" class="select-premium full-width" onchange="updateToFUI()">
+                                    <option value="vl53l0x">VL53L0X (Básico — 2m)</option>
+                                    <option value="vl53l1x">VL53L1X (Largo alcance — 4m)</option>
+                                    <option value="vl53l1xv2">VL53L1X v2 (Largo alcance — 4m)</option>
+                                    <option value="vl6180">VL6180X (Corto alcance — 60cm)</option>
+                                    <option value="vl53l5x">VL53L5CX (Multizona — 8x8)</option>
+                                    <option value="vi5300">VI5300 dToF (3m)</option>
+                                    <option value="tof10120">ToF10120 (1.8m)</option>
+                                    <option value="tofsense">TOFSense LiDAR (UART — 25m)</option>
+                                    <option value="tfmini_s">TFmini-S LiDAR (UART — 12m)</option>
+                                    <option value="none">Ninguno</option>
+                                </select>
+                            </div>
 
                             <div id="tof_range_container" style="margin-top:15px; display:none;">
                                 <label class="config-label">Perfil de Alcance</label>

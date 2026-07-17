@@ -494,6 +494,42 @@
             background: rgba(255, 255, 255, 0.02);
             border-color: rgba(0, 242, 254, 0.2);
         }
+        /* ToF Physics table & formulas */
+        .physics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .physics-table th, .physics-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+        .physics-table th {
+            background: rgba(0, 242, 254, 0.05);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .physics-table tr:hover {
+            background: rgba(255, 255, 255, 0.01);
+        }
+        .formula-card {
+            background: rgba(0, 242, 254, 0.03);
+            border: 1px dashed var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 1.2rem;
+            color: var(--primary);
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.1);
+        }
     </style>
 </head>
 <body>    <header>
@@ -508,6 +544,7 @@
             <button class="tab-btn" id="tab-btn-multiuser" onclick="switchTab('multiuser')">🔑 Roles y Accesos</button>
             <button class="tab-btn" id="tab-btn-collision" onclick="switchTab('collision')">📡 Anti-Colisión MAC</button>
             <button class="tab-btn" id="tab-btn-philosophy" onclick="switchTab('philosophy')">🌲 Filosofía Offline</button>
+            <button class="tab-btn" id="tab-btn-tofphysics" onclick="switchTab('tofphysics')">📊 Física de ToF</button>
         </nav>
 
         <!-- VIEW: Project (MAIN VIEW) -->
@@ -667,6 +704,93 @@
                     <span class="card-icon">☁️</span>
                     <h3>Sincronización Diferida</h3>
                     <p>Si no hay internet, los experimentos se resguardan automáticamente en el localStorage del teléfono. Al volver a la ciudad, la bitácora Firebase sincroniza los datos silenciosamente.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: ToF Physics -->
+        <section class="view-content" id="view-tofphysics">
+            <div class="project-desc-card">
+                <h3 style="text-align: center; margin-bottom: 20px; font-size: 1.6rem; color: var(--primary);">📊 Física y Matemática en Sensores de Tiempo de Vuelo (ToF)</h3>
+                
+                <h4 style="color: var(--primary); margin: 20px 0 10px; font-weight: 600;">1. El Principio del Tiempo de Vuelo Directo (dToF)</h4>
+                <p style="font-size: 0.95rem; line-height: 1.6; color: #8b949e; margin-bottom: 12px; text-align: justify;">
+                    Los sensores dToF (como el <b>VI5300</b>) emiten ráfagas ultracortas de fotones de luz láser infrarroja invisible. Estos fotones viajan en el aire, se reflejan en el objeto de estudio y retornan hacia una matriz de diodos de avalancha de fotón único (SPAD) integrados en el chip.
+                </p>
+                <p style="font-size: 0.95rem; line-height: 1.6; color: #8b949e; margin-bottom: 12px; text-align: justify;">
+                    Midiendo con precisión nanométrica el intervalo de tiempo transcurrido (\(\Delta t\)) desde la emisión hasta la recepción del pulso, el microcontrolador interno calcula la distancia física (\(d\)) aplicando la velocidad constante de la luz (\(c \approx 3 \times 10^8 \text{ m/s}\)):
+                </p>
+                <div class="formula-card">
+                    d = (c * &Delta;t) / 2
+                </div>
+                
+                <h4 style="color: var(--primary); margin: 25px 0 10px; font-weight: 600;">2. El Presupuesto Fotónico y las Cuentas de Integración</h4>
+                <p style="font-size: 0.95rem; line-height: 1.6; color: #8b949e; margin-bottom: 12px; text-align: justify;">
+                    La intensidad y cantidad de fotones devueltos al sensor decae de forma cuadrática respecto a la distancia de viaje (\(1/d^2\)). Para que el sensor logre una medida confiable, debe recolectar una cantidad de luz superior al umbral de ruido ambiental del aula. Esta sensibilidad se ajusta mediante el parámetro de <b>Cuentas de Integración</b> (tiempo que la compuerta del sensor permanece abierta recolectando luz).
+                </p>
+                <p style="font-size: 0.95rem; line-height: 1.6; color: #8b949e; margin-bottom: 12px; text-align: justify;">
+                    Aquí surge una restricción física fundamental: <b>a mayor frecuencia de muestreo (FPS), menor es el tiempo de integración máximo permitido</b> por periodo de trama.
+                </p>
+                
+                <h4 style="color: var(--primary); margin: 25px 0 10px; font-weight: 600;">3. Tabla Comparativa de Sensores y Rangos Óptimos</h4>
+                <table class="physics-table">
+                    <thead>
+                        <tr>
+                            <th>Sensor</th>
+                            <th>Frecuencia Máxima</th>
+                            <th>Rango Físico</th>
+                            <th>Configuración Recomendada (Caída Libre / Cinemática)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>VI5300 dToF</strong></td>
+                            <td>90 Hz (11 ms)</td>
+                            <td>5 cm - 3.0 m</td>
+                            <td>
+                                <b>90 Hz (11ms):</b> Caídas libres cortas (mesa) &lt; 70 cm.<br>
+                                <b>65 Hz (15ms):</b> Ensayo empírico para caídas de hasta 1.0 m.<br>
+                                <b>30 Hz (33ms):</b> Caídas estándar de 1.2 m (Sweet Spot).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>VL53L1X</strong></td>
+                            <td>50 Hz (20 ms)</td>
+                            <td>4 cm - 4.0 m</td>
+                            <td>
+                                <b>50 Hz / Short:</b> Caídas de hasta 1.3 m (Inmune a luz de aula).<br>
+                                <b>20 Hz / Long:</b> Experimentos de largo recorrido (hasta 4 m).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>VL53L0X</strong></td>
+                            <td>50 Hz (20 ms)</td>
+                            <td>3 cm - 2.0 m</td>
+                            <td>
+                                <b>50 Hz / Short:</b> Caídas cortas de hasta 80 cm.<br>
+                                <b>30 Hz / Long:</b> Rango de hasta 1.8 m (requiere mayor budget).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>TFmini-S</strong></td>
+                            <td>100 Hz (UART)</td>
+                            <td>10 cm - 12.0 m</td>
+                            <td>Caídas de gran altura desde el techo o péndulos gigantes.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>TOFSense</strong></td>
+                            <td>100 Hz (UART)</td>
+                            <td>10 cm - 25.0 m</td>
+                            <td>Uso en pasillos o exteriores a gran escala.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="background: rgba(251, 191, 36, 0.08); border: 1px dashed rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 15px; margin-top: 20px;">
+                    <span style="color: #fbbf24; font-weight: bold;">💡 Recomendación Pedagógica para Estudiantes:</span><br>
+                    <span style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.5;">
+                        Para un análisis preciso de la aceleración gravitacional (\(g\)), se requieren al menos 15-20 muestras durante el vuelo. Si usas el VL53L0X, asegúrate de colocar el sensor en modo Short-Range a 50 Hz y deja caer el objeto desde no más de 80 cm de altura. Si usas el VI5300, configúralo a 30 Hz y utilízalo para la caída libre convencional de 1.2 metros.
+                    </span>
                 </div>
             </div>
         </section>

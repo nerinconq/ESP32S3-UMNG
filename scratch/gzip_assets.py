@@ -1,26 +1,28 @@
 import gzip
-import shutil
 import os
 
+web_dir = "data/www"
 files_to_compress = [
-    "data/www/index.html",
-    "data/www/app.js",
-    "data/www/manual.html",
-    "data/www/styles.css",
-    "data/www/firebase-sync.js"
+    "index.html",
+    "app.js",
+    "styles.css",
+    "manual.html",
+    "firebase-sync.js"
 ]
 
-print("Comprimiendo recursos web...")
-for file_path in files_to_compress:
-    if os.path.exists(file_path):
-        gz_path = file_path + ".gz"
-        with open(file_path, 'rb') as f_in:
-            with gzip.open(gz_path, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        orig_size = os.path.getsize(file_path)
-        gz_size = os.path.getsize(gz_path)
-        reduction = (1 - (gz_size / orig_size)) * 100
-        print(f"[OK] {file_path} -> {gz_path} ({orig_size/1024:.1f} KB -> {gz_size/1024:.1f} KB, -{reduction:.1f}%)")
+for fname in files_to_compress:
+    src = os.path.join(web_dir, fname)
+    dst = src + ".gz"
+    if os.path.exists(src):
+        with open(src, "rb") as f_in:
+            data = f_in.read()
+        with gzip.open(dst, "wb", compresslevel=9) as f_out:
+            f_out.write(data)
+        orig_size = len(data)
+        gz_size = os.path.getsize(dst)
+        ratio = (1 - gz_size / orig_size) * 100 if orig_size > 0 else 0
+        print(f"  {fname}: {orig_size:,} -> {gz_size:,} bytes ({ratio:.1f}% reduccion)")
     else:
-        print(f"[ERR] Archivo no encontrado: {file_path}")
-print("Compresion completa!")
+        print(f"  {fname}: NO ENCONTRADO")
+
+print("\nCompresion GZIP completada.")

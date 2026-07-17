@@ -85,6 +85,35 @@ let isLeaderActive = false;
 let leaderIp = "";
 let selectedAuthRole = "student";
 let activeHardwareProfile = { camera_detected: false, type: "standard_base", pins: {} };
+let lastConfig = {}; // Último bloque config recibido del ESP32 (para etiquetas de sensor activo)
+
+// ─── Sensor Name Labels ───
+const SENSOR_DISPLAY_NAMES = {
+    vl53l0x: 'VL53L0X (I²C)', vl53l1x: 'VL53L1X (I²C)', vl53lxx: 'VL53L1X v2 (I²C)',
+    vi5300: 'VI5300 (I²C)', vl6180x: 'VL6180X (I²C)', vl53l5cx: 'VL53L5CX (I²C)',
+    tof10120: 'ToF10120 (I²C)', tofsense: 'TOFSense (UART)', tfmini_s: 'TFmini-S (UART)',
+    as5600: 'AS5600', hx711: 'HX711', nau7802: 'NAU7802', none: 'Ninguno'
+};
+function getSensorLabel(tabName) {
+    if (tabName === 'movimiento') return SENSOR_DISPLAY_NAMES[lastConfig.tof_model] || '';
+    if (tabName === 'rotacion') return SENSOR_DISPLAY_NAMES[lastConfig.enc_model] || '';
+    if (tabName === 'fuerza') return SENSOR_DISPLAY_NAMES[lastConfig.weight_mode] || '';
+    return '';
+}
+function updateSensorSubtitle() {
+    const titleEl = document.getElementById('display-title');
+    if (!titleEl) return;
+    let sub = document.getElementById('sensor-subtitle');
+    const label = getSensorLabel(currentTab);
+    if (!label) { if (sub) sub.textContent = ''; return; }
+    if (!sub) {
+        sub = document.createElement('span');
+        sub.id = 'sensor-subtitle';
+        sub.className = 'sensor-subtitle';
+        titleEl.parentNode.insertBefore(sub, titleEl.nextSibling);
+    }
+    sub.textContent = label;
+}
 
 // ─── DOM Elements ───
 const $ = id => document.getElementById(id);
@@ -225,6 +254,11 @@ function connectWS() {
                 return;
             }
 
+            if (data.command === 'BUS_SCAN') {
+                handleBusScan(data);
+                return;
+            }
+
             if (data.command === 'TRIGGER_STOP') {
                 setStatus('Toma completa', '#a78bfa');
                 $('btn-trigger').classList.remove('recording');
@@ -297,67 +331,43 @@ function connectWS() {
 
 // ─── Display Update ───
 function updateDisplay(data) {
-    const tabConf = TAB_CONFIG[currentTab];
-    if (!tabConf) return;
-    const varConf = tabConf.variables.find(v => v.key === selectedVariable);
-    if (!varConf) return;
+    if (!data) return;
 
-    const val = data[selectedVariable];
-    $('main-val').textContent = typeof val === 'number' ? val.toFixed(2) : '---';
-    $('main-unit').textContent = varConf.unit;
-
-    // Sub-metrics
-    tabConf.subMetrics.forEach((m, i) => {
-        const idx = i + 1;
-        $('sub-label-' + idx).textContent = m.label;
-        const mVal = data[m.key];
-        $('sub-val-' + idx).innerHTML =
-            (typeof mVal === 'number' ? mVal.toFixed(3) : '---') +
-            ' <small>' + m.unit + '</small>';
-    });
-
-    // Sensor badges
-    if (data.sensors) {
-        updateSensorBadges(data.sensors);
-    }
-    
     // Config updates (feedback loop protection)
     if (data.config) {
-        // Solo actualizamos si el usuario NO está interactuando con el panel de configuración
-        const configVisible = $('config-panel') && $('config-panel').style.display !== 'none';
-        if (configVisible) {
-            // Si el panel de configuración está activo, bloqueamos actualizaciones por WebSocket para evitar feedback loops
-            return;
-        }
-        const tofEl = $('tof_model');
-        const srEl = $('sample_rate');
-        
-        if (!configVisible || (tofEl && document.activeElement !== tofEl)) {
+        // Guardar config completo para etiquetas de sensor activo
+        Object.assign(lastConfig, data.config);
+        updateSensorSubtitle(); // Actualizar etiqueta si cambió el sensor
+
+        const configVisible = (currentTab === 'config');
+        if (!configVisible) {
+            const tofEl = $('tof_model');
+            const srEl = $('sample_rate');
+            
             if (data.config.tof_model && tofEl && tofEl.value != data.config.tof_model) {
                 tofEl.value = data.config.tof_model;
+                updateToFUI();
             }
-        }
-        
-        if (!configVisible || (srEl && document.activeElement !== srEl)) {
-            // Si recibimos sample_rate, nos aseguramos de que el selector lo refleje
+            syncBusesFromConfig(data.config);
+            
             if (data.config.sample_rate && srEl && srEl.value != data.config.sample_rate) {
                 srEl.value = data.config.sample_rate;
             } else if (!data.config.sample_rate && srEl) {
                 srEl.value = "10"; // Default to 100Hz (10ms) if not set
             }
+
+            const usbLogEl = $('usb-auto-log');
+            if (data.config.usb_log !== undefined && usbLogEl && document.activeElement !== usbLogEl) {
+                usbLogEl.checked = data.config.usb_log;
+            }
+
+            const invEncEl = $('invert-encoder-check');
+            if (data.config.invert_encoder !== undefined && invEncEl && document.activeElement !== invEncEl) {
+                invEncEl.checked = data.config.invert_encoder;
+            }
         }
 
-        const usbLogEl = $('usb-auto-log');
-        if (data.config.usb_log !== undefined && usbLogEl && (!configVisible || document.activeElement !== usbLogEl)) {
-            usbLogEl.checked = data.config.usb_log;
-        }
-
-        const invEncEl = $('invert-encoder-check');
-        if (data.config.invert_encoder !== undefined && invEncEl && (!configVisible || document.activeElement !== invEncEl)) {
-            invEncEl.checked = data.config.invert_encoder;
-        }
-
-        // HX711 Filter & Stability Sync
+        // HX711 Filter & Stability Sync (siempre actualizar)
         const hxFilterEl = $('hx-filter-check');
         const hxFilterCfgEl = $('config-hx-filter-check');
         if (data.config.hx_filter !== undefined) {
@@ -380,6 +390,30 @@ function updateDisplay(data) {
                 $('auto-stop-dist').value = data.config.tube_length;
             }
         }
+    }
+
+    const tabConf = TAB_CONFIG[currentTab];
+    if (!tabConf) return;
+    const varConf = tabConf.variables.find(v => v.key === selectedVariable);
+    if (!varConf) return;
+
+    const val = data[selectedVariable];
+    $('main-val').textContent = typeof val === 'number' ? val.toFixed(2) : '---';
+    $('main-unit').textContent = varConf.unit;
+
+    // Sub-metrics
+    tabConf.subMetrics.forEach((m, i) => {
+        const idx = i + 1;
+        $('sub-label-' + idx).textContent = m.label;
+        const mVal = data[m.key];
+        $('sub-val-' + idx).innerHTML =
+            (typeof mVal === 'number' ? mVal.toFixed(3) : '---') +
+            ' <small>' + m.unit + '</small>';
+    });
+
+    // Sensor badges
+    if (data.sensors) {
+        updateSensorBadges(data.sensors);
     }
 }
 
@@ -580,7 +614,7 @@ function prepareExportData(sensor) {
     const data = sensorData[sensor];
     return {
         device: 'Physys-Lab', 
-        version: 'v9.0', 
+        version: 'V_1_16_07_26', 
         sensor: sensor,
         tab: tabConf ? tabConf.title : 'Desconocido',
         exported: new Date().toISOString(),
@@ -626,7 +660,7 @@ function toggleRecording() {
         if (recordedData.length > 0) {
             const autoExportData = {
                 device: 'Physys-Lab',
-                version: 'v9.0',
+                version: 'V_1_16_07_26',
                 sensor: 'GLOBAL',
                 tab: 'Global Recording',
                 exported: new Date().toISOString(),
@@ -1145,13 +1179,17 @@ function fetchSystemInfo() {
     fetch('/api/status')
         .then(r => r.json())
         .then(data => {
+            console.log("[fetchSystemInfo] data:", data);
             $('heap-info').textContent = (data.heap / 1024).toFixed(0) + ' KB';
             $('psram-info').textContent = (data.psram / 1024).toFixed(0) + ' KB';
             $('uptime-info').textContent = data.uptime;
             
-            // Sincronizar selectores de configuración si vienen en el status
-            if (data.config) {
-                if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
+            const configVisible = (currentTab === 'config');
+            if (!configVisible && data.config) {
+                if (data.config.tof_model && $('tof_model').value != data.config.tof_model) {
+                    $('tof_model').value = data.config.tof_model;
+                    updateToFUI();
+                }
                 if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
                 if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
             }
@@ -1406,6 +1444,7 @@ function switchTab(tabName) {
             if (!tabConf) return;
 
             $('display-title').textContent = tabConf.title;
+            updateSensorSubtitle();
 
             // Populate variable selector
             const sel = $('graph-variable');
@@ -1464,16 +1503,58 @@ function switchTab(tabName) {
 // ─── Consolidated Save All Config ───
 function saveAllConfig() {
     if (!ws || ws.readyState !== WebSocket.OPEN) { alert('Sin conexión'); return; }
-    const model = $('tof_model').value;
+    
+    // Calcular qué sensor de distancia está activo
+    let tofModel = 'none';
+    const pin67Mode = $('pin67_mode').value;
+    if (pin67Mode === 'uart') {
+        tofModel = $('uart_sensor').value;
+    } else {
+        if ($('bus0_mag').value === 'distance') {
+            tofModel = $('bus0_sensor').value;
+        } else if ($('bus1_mag').value === 'distance') {
+            tofModel = $('bus1_sensor').value;
+        }
+    }
+    
+    // Calcular si el encoder está activo
+    let encModel = 'none';
+    if ($('bus0_mag').value === 'angle' && $('bus0_sensor').value === 'as5600') {
+        encModel = 'as5600';
+    } else if ($('bus1_mag').value === 'angle' && $('bus1_sensor').value === 'as5600') {
+        encModel = 'as5600';
+    }
+    
+    // Calcular el modo de peso
+    let weightMode = 'none';
+    if (pin67Mode === 'hx711') {
+        weightMode = 'hx711';
+    } else {
+        if ($('bus0_mag').value === 'weight' && $('bus0_sensor').value === 'nau7802') {
+            weightMode = 'nau7802';
+        } else if ($('bus1_mag').value === 'weight' && $('bus1_sensor').value === 'nau7802') {
+            weightMode = 'nau7802';
+        }
+    }
+
     const rate = $('sample_rate').value;
     const tube = $('tube_length') ? $('tube_length').value : '0';
-    ws.send('SET_TOF:' + model);
+    
+    // Enviar comandos
+    ws.send('SET_TOF:' + tofModel);
+    ws.send('SET_ENC:' + encModel);
+    ws.send('SET_WEIGHT:' + weightMode);
     ws.send('SET_RATE:' + rate);
     ws.send('SET_TUBE:' + tube);
+    
     if ($('auto-stop-dist')) $('auto-stop-dist').value = tube; // Sincronizar visualmente
+    
     const btn = $('btn-save-config');
     if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = '💾 Guardar Configuración'; }, 2000); }
-    alert('Configuración guardada (ToF: ' + model + ', Freq: ' + (1000/rate).toFixed(0) + ' Hz, Tubo: ' + tube + ' mm).\n\nSe aplicará tras reinicio si cambió el sensor ToF.');
+    alert('Configuración guardada:\n- ToF: ' + tofModel + '\n- Encoder: ' + encModel + '\n- Peso: ' + weightMode + '\n- Freq: ' + (1000/rate).toFixed(0) + ' Hz\n- Tubo: ' + tube + ' mm.\n\nEl ESP32 se reiniciará para aplicar los cambios.');
+    setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('REBOOT');
+    }, 1000);
 }
 
 // ─── Export Modal (unified: CSV, JSON, USB, Share) ───
@@ -1654,21 +1735,165 @@ function openExportModal() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Visor Desmos - Physys Lab</title>
-<script src="https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6"></script>
-<style>body,html{margin:0;padding:0;height:100%;overflow:hidden;}</style>
+<title>Visor de Datos - Physys Lab</title>
+<style>
+body,html{margin:0;padding:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;overflow:hidden;}
+#container{position:relative;width:100vw;height:100vh;display:flex;flex-direction:column;}
+#header-bar{background:#1e293b;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;z-index:10;}
+.btn{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+.btn:hover{opacity:0.9;}
+#view-container{flex:1;position:relative;}
+#calculator{width:100%;height:100%;display:none;}
+#offline-view{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;box-sizing:border-box;}
+#chart-canvas{background:#1e293b;border:1px solid #334155;border-radius:8px;max-width:95%;max-height:75%;}
+.msg{color:#94a3b8;font-size:12px;margin-bottom:12px;text-align:center;max-width:600px;}
+</style>
 </head>
 <body>
-<div id="calculator" style="width:100vw;height:100vh;"></div>
+<div id="container">
+  <div id="header-bar">
+    <span style="font-weight:bold;font-size:14px;color:#14f0c5;">📊 Visor Physys Lab</span>
+    <button id="btn-load-desmos" class="btn" onclick="tryLoadDesmos()">🌐 Cargar Desmos (Online)</button>
+  </div>
+  <div id="view-container">
+    <div id="calculator"></div>
+    <div id="offline-view">
+      <div class="msg">📊 <b>Visor Offline Activo:</b> Mostrando gráfica local. Si tienes datos móviles, pulsa el botón superior para cargar la calculadora completa de Desmos.</div>
+      <canvas id="chart-canvas"></canvas>
+    </div>
+  </div>
+</div>
 <script>
-var elt = document.getElementById('calculator');
-var calc = Desmos.GraphingCalculator(elt, {
-    keypad: true,
-    expressions: true,
-    settingsMenu: true,
-    zoomButtons: true
-});
-calc.setState(${stateJson});
+var state = ${stateJson};
+var desmosLoaded = false;
+
+function drawOfflineChart() {
+    var canvas = document.getElementById('chart-canvas');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    
+    var width = window.innerWidth * 0.9;
+    var height = window.innerHeight * 0.65;
+    canvas.width = Math.min(width, 800);
+    canvas.height = Math.min(height, 500);
+    
+    var w = canvas.width;
+    var h = canvas.height;
+    
+    var table = state.expressions.list.find(function(e) { return e.type === 'table'; });
+    if (!table || table.columns.length < 2) return;
+    
+    var xVals = table.columns[0].values.map(Number);
+    var yVals = table.columns[1].values.map(Number);
+    
+    var minX = Math.min.apply(null, xVals);
+    var maxX = Math.max.apply(null, xVals);
+    var minY = Math.min.apply(null, yVals);
+    var maxY = Math.max.apply(null, yVals);
+    
+    var padding = 50;
+    
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px sans-serif';
+    
+    function toScreenX(x) {
+        return padding + (x - minX) * (w - padding * 2) / (maxX - minX || 1);
+    }
+    function toScreenY(y) {
+        return h - padding - (y - minY) * (h - padding * 2) / (maxY - minY || 1);
+    }
+    
+    var xSteps = 5;
+    for (var i = 0; i <= xSteps; i++) {
+        var xVal = minX + i * (maxX - minX) / xSteps;
+        var sx = toScreenX(xVal);
+        ctx.beginPath();
+        ctx.moveTo(sx, padding);
+        ctx.lineTo(sx, h - padding);
+        ctx.stroke();
+        ctx.fillText(xVal.toFixed(0), sx - 10, h - padding + 15);
+    }
+    
+    var ySteps = 5;
+    for (var i = 0; i <= ySteps; i++) {
+        var yVal = minY + i * (maxY - minY) / ySteps;
+        var sy = toScreenY(yVal);
+        ctx.beginPath();
+        ctx.moveTo(padding, sy);
+        ctx.lineTo(w - padding, sy);
+        ctx.stroke();
+        ctx.fillText(yVal.toFixed(1), padding - 35, sy + 3);
+    }
+    
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, h - padding);
+    ctx.lineTo(w - padding, h - padding);
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, h - padding);
+    ctx.stroke();
+    
+    ctx.fillStyle = '#14f0c5';
+    ctx.fillText('t (ms)', w / 2, h - 10);
+    ctx.fillText(state.graph.yAxisLabel || 'Posición (mm)', 10, padding - 15);
+    
+    ctx.strokeStyle = '#00d4ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var i = 0; i < xVals.length; i++) {
+        var sx = toScreenX(xVals[i]);
+        var sy = toScreenY(yVals[i]);
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    
+    ctx.fillStyle = '#38bdf8';
+    for (var i = 0; i < xVals.length; i++) {
+        ctx.beginPath();
+        ctx.arc(toScreenX(xVals[i]), toScreenY(yVals[i]), 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function tryLoadDesmos() {
+    if (desmosLoaded) return;
+    document.getElementById('btn-load-desmos').textContent = '⏳ Cargando...';
+    
+    var script = document.createElement('script');
+    script.src = 'https://www.desmos.com/api/v1.9/calculator.js?apiKey=dcb31709b452b1cf9dc26972add0fda6';
+    script.onload = function() {
+        document.getElementById('offline-view').style.display = 'none';
+        document.getElementById('calculator').style.display = 'block';
+        document.getElementById('btn-load-desmos').style.display = 'none';
+        
+        var elt = document.getElementById('calculator');
+        var calc = Desmos.GraphingCalculator(elt, {
+            keypad: true,
+            expressions: true,
+            settingsMenu: true,
+            zoomButtons: true
+        });
+        calc.setState(state);
+        desmosLoaded = true;
+    };
+    script.onerror = function() {
+        document.getElementById('btn-load-desmos').textContent = '❌ Reintentar Cargar Desmos';
+        alert('No se pudo descargar la API de Desmos. Asegúrate de tener datos móviles encendidos y estar fuera de la red WiFi del ESP32.');
+    };
+    document.head.appendChild(script);
+}
+
+window.onload = function() {
+    drawOfflineChart();
+    tryLoadDesmos();
+};
+window.onresize = function() {
+    if (!desmosLoaded) drawOfflineChart();
+};
 </script>
 </body>
 </html>`;
@@ -1954,9 +2179,12 @@ function fetchConfig() {
     fetch('/api/status')
         .then(r => r.json())
         .then(data => {
+            console.log("[fetchConfig] data:", data);
             if (data.config) {
-                if (data.config.tof_model) $('tof_model').value = data.config.tof_model;
-                if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
+                if (data.config.tof_model) {
+                    $('tof_model').value = data.config.tof_model;
+                    updateToFUI();
+                }
                 if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
                 if (data.config.invert_encoder !== undefined && $('invert-encoder-check')) $('invert-encoder-check').checked = data.config.invert_encoder;
                 
@@ -1976,7 +2204,11 @@ function fetchConfig() {
                 if (data.config.tof_range !== undefined && $('tof_range')) {
                     $('tof_range').value = data.config.tof_range;
                 }
+                
+                // Sincronizar selectores de buses
+                syncBusesFromConfig(data.config);
                 updateToFUI();
+                if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
             }
             const sensors = data.sensors || {};
             updateUsbUI(sensors.usb, sensors.usb ? 'Pendrive Conectado' : 'No detectado');
@@ -2142,12 +2374,215 @@ function setEditorStatus(msg, cls) {
 
 // ─── ToF UI Helpers ───
 const TOF_INFO = {
-    'vl53l0x': 'Alcance hasta 2.0m. Resolución 1mm. Zona muerta: <30mm. Ideal para rieles de aire y caída libre.',
-    'vl53l1x': 'Alcance hasta 4.0m. Resolución 1mm. Zona muerta: <40mm. Resistente a luz ambiental intensa.',
-    'vl53l1xv2': 'VL53L1X v2 optimizado. Zona muerta: <40mm. Mejor precisión a larga distancia.',
-    'vl6180': 'Alcance corto (60cm). Muy alta precisión. Zona muerta: <10mm. Ideal para experimentos de mesa pequeños.',
-    'vl53l5x': 'Multizona (8x8). Permite medir múltiples objetos. Zona muerta: <20mm.'
+    'vl53l0x': '<b>VL53L0X (2m):</b> Para caída libre (alta velocidad), utilízalo en <b>Corto Alcance (Short Range)</b> a max <b>50 Hz</b> y deja caer el objeto desde <b>max 80 cm</b> (para asegurar suficientes datos y evitar ruido). Usa <b>Largo Alcance (Long Range)</b> para rieles o péndulos donde la velocidad es menor y el objeto está más lejos (hasta 1.8m).',
+    'vl53l1x': '<b>VL53L1X (4m):</b> En <b>Corto Alcance (Short)</b> es inmune a luz ambiente y llega hasta <b>1.3m</b> a <b>50 Hz</b> (ideal para caída libre desde 1.2m con muchos datos). Para mayores distancias (ej. experimentos en pasillos), usa <b>Largo Alcance (Long)</b> hasta 4m a menor frecuencia.',
+    'vl53l1xv2': '<b>VL53L1X v2 (4m):</b> Versión optimizada del VL53L1X. En <b>Corto Alcance (Short)</b> ideal para caídas hasta <b>1.3m</b> a <b>50 Hz</b>. Usa <b>Largo Alcance (Long)</b> para medir mayor longitud con menor velocidad de muestreo.',
+    'vi5300': '<b>VI5300 dToF (3m):</b> Gran estabilidad. En <b>Corto Alcance</b> corre dinámicamente hasta <b>90 Hz (11 ms)</b> (ideal para caída libre desde 70cm con altísima densidad de datos). Para medir hasta 2m, usa <b>Largo Alcance</b> (limita a 15 Hz por mayor exposición).',
+    'vl6180': '<b>VL6180X (60cm):</b> Alcance muy corto pero con precisión sub-milimétrica. Ideal para pequeños experimentos de mesa o micro-desplazamientos.',
+    'vl53l5x': '<b>VL53L5CX (8x8):</b> Sensor multizona. Ideal para seguir la trayectoria de un objeto en dos dimensiones o múltiples cuerpos concurrentes.',
+    'tofsense': '<b>TOFSense LiDAR (UART):</b> Alcance ultra-largo de hasta 25m. Ideal para pasillos o exteriores, pero requiere desconectar la celda de carga HX711 por hardware.',
+    'tfmini_s': '<b>TFmini-S LiDAR (UART):</b> Alcance de hasta 12m. Ideal para péndulos de gran altura o caída libre desde el techo, pero requiere desconectar la celda de carga HX711.'
 };
+
+// ─── Bus Selector Logic ───
+const SENSOR_CATALOG = {
+    distance: [
+        {value:'vl53l0x',  label:'VL53L0X (2m)',          volt:'3.3V',    icon:'✅'},
+        {value:'vl53l1x',  label:'VL53L1X (4m)',          volt:'3.3V',    icon:'✅'},
+        {value:'vl53l1xv2',label:'VL53L1X v2 (4m)',       volt:'3.3V',    icon:'✅'},
+        {value:'vl6180',   label:'VL6180X (60cm)',         volt:'3.3V',    icon:'✅'},
+        {value:'vl53l5x',  label:'VL53L5CX (8x8)',        volt:'3.3V',    icon:'✅'},
+        {value:'tof10120', label:'ToF10120 (1.8m)',        volt:'3.3-5V',  icon:'✅'},
+        {value:'vi5300',   label:'VI5300 dToF (3m)',       volt:'3.3V',    icon:'✅'},
+        {value:'none',     label:'Ninguno',                volt:'',        icon:''}
+    ],
+    weight: [
+        {value:'nau7802',  label:'NAU7802 (Qwiic Scale)',  volt:'3.3V',    icon:'✅'},
+        {value:'none',     label:'Ninguno',                volt:'',        icon:''}
+    ],
+    angle: [
+        {value:'as5600',   label:'AS5600 (Encoder Mag.)',  volt:'3.3V',    icon:'✅'},
+        {value:'none',     label:'Ninguno',                volt:'',        icon:''}
+    ]
+};
+
+const VOLTAGE_WARNINGS = {
+    tofsense: '⚡ TOFSense requiere 5V en VCC. TX/RX son 3.3V LVTTL (seguras para ESP32).',
+    tfmini_s: '⚡ TFmini-S requiere 5V ESTRICTO en VCC. TX/RX son 3.3V LVTTL.',
+};
+
+function onBusMagChange(busIdx) {
+    const mag = $('bus'+busIdx+'_mag').value;
+    const wrap = $('bus'+busIdx+'_sensor_wrap');
+    if (mag === 'none') { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    const sel = $('bus'+busIdx+'_sensor');
+    sel.innerHTML = '';
+    (SENSOR_CATALOG[mag]||[]).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.value; opt.textContent = s.icon + ' ' + s.label + (s.volt?' ('+s.volt+')':'');
+        sel.appendChild(opt);
+    });
+    onBusSensorChange(busIdx);
+}
+
+function onBusSensorChange(busIdx) {
+    const sensor = $('bus'+busIdx+'_sensor').value;
+    const voltDiv = $('bus'+busIdx+'_volt');
+    if (VOLTAGE_WARNINGS[sensor]) {
+        voltDiv.innerHTML = '<span style="color:#ff9800">' + VOLTAGE_WARNINGS[sensor] + '</span>';
+    } else {
+        voltDiv.innerHTML = sensor !== 'none' ? '<span style="color:#4caf50">✅ Alimentación segura a 3.3V</span>' : '';
+    }
+    // Sync con selector principal si es distancia
+    const mag = $('bus'+busIdx+'_mag').value;
+    if (mag === 'distance' && sensor !== 'none') {
+        const tofSel = $('tof_model');
+        if (tofSel) { tofSel.value = sensor; updateToFUI(); }
+    }
+}
+
+function handleBusScan(data) {
+    for (let busIdx = 0; busIdx < 2; busIdx++) {
+        const el = $('bus'+busIdx+'_detect');
+        const devs = data['bus'+busIdx] || [];
+        if (devs.length === 0) {
+            el.innerHTML = '🔴 Ningún dispositivo detectado';
+            el.style.color = '#e57373';
+        } else {
+            let html = '';
+            devs.forEach(d => {
+                html += '🟢 <b>' + d.sensor.toUpperCase() + '</b> (' + d.addr + ') — ' + d.mag + ' ' + d.volt + '<br>';
+            });
+            el.innerHTML = html;
+            el.style.color = '#81c784';
+            
+            // Si el usuario no ha elegido nada, auto-preseleccionar el detectado físicamente
+            const currentMag = $('bus'+busIdx+'_mag').value;
+            if (currentMag === 'none') {
+                const first = devs[0];
+                $('bus'+busIdx+'_mag').value = first.mag;
+                onBusMagChange(busIdx);
+                $('bus'+busIdx+'_sensor').value = first.sensor;
+                onBusSensorChange(busIdx);
+            }
+        }
+    }
+    // HX711 / UART status
+    const hxEl = $('hx_uart_status');
+    if (data.hx711) {
+        hxEl.innerHTML = '🟢 <b>HX711</b> detectado (celda de carga activa)';
+        hxEl.style.color = '#81c784';
+    } else if (data.uart) {
+        hxEl.innerHTML = '🟢 <b>UART</b> activo (sensor de distancia por UART)';
+        hxEl.style.color = '#4fc3f7';
+    } else {
+        hxEl.innerHTML = '⚪ Sin HX711 ni UART activo — pines disponibles';
+        hxEl.style.color = '#aaa';
+    }
+}
+
+function onPin67ModeChange() {
+    const mode = $('pin67_mode').value;
+    const wrap = $('uart_sensor_wrap');
+    if (mode !== 'uart') {
+        wrap.style.display = 'none';
+        updateActiveSensorFromBuses();
+        return;
+    }
+    wrap.style.display = 'block';
+    onUartSensorChange();
+}
+
+function onUartSensorChange() {
+    const sensor = $('uart_sensor').value;
+    if (sensor === 'back') {
+        $('pin67_mode').value = 'none';
+        onPin67ModeChange();
+        return;
+    }
+    
+    const voltDiv = $('uart_volt');
+    if (VOLTAGE_WARNINGS[sensor]) {
+        voltDiv.innerHTML = '<span style="color:#ff9800">' + VOLTAGE_WARNINGS[sensor] + '</span>';
+    } else {
+        voltDiv.innerHTML = sensor !== 'none' ? '<span style="color:#4caf50">✅ Alimentación segura a 3.3V</span>' : '';
+    }
+    
+    updateActiveSensorFromBuses();
+}
+
+function updateActiveSensorFromBuses() {
+    let activeTof = 'vl53l0x';
+    const gpioMode = $('pin67_mode').value;
+    if (gpioMode === 'uart') {
+        activeTof = $('uart_sensor').value;
+    } else {
+        const bus0Mag = $('bus0_mag').value;
+        const bus1Mag = $('bus1_mag').value;
+        if (bus0Mag === 'distance') {
+            activeTof = $('bus0_sensor').value;
+        } else if (bus1Mag === 'distance') {
+            activeTof = $('bus1_sensor').value;
+        } else {
+            activeTof = 'none';
+        }
+    }
+    
+    const tofSel = $('tof_model');
+    if (tofSel && tofSel.value !== activeTof) {
+        tofSel.value = activeTof;
+        updateToFUI();
+    }
+}
+
+function syncBusesFromConfig(config) {
+    if (!config) return;
+    
+    // Resetear a "Ninguno" por defecto
+    $('bus0_mag').value = 'none';
+    $('bus1_mag').value = 'none';
+    $('pin67_mode').value = 'none';
+    
+    onBusMagChange(0);
+    onBusMagChange(1);
+    onPin67ModeChange();
+
+    // 1. Peso (HX711 o NAU7802)
+    if (config.weight_mode === 'hx711') {
+        $('pin67_mode').value = 'hx711';
+        onPin67ModeChange();
+    } else if (config.weight_mode === 'nau7802') {
+        $('bus0_mag').value = 'weight';
+        onBusMagChange(0);
+        $('bus0_sensor').value = 'nau7802';
+        onBusSensorChange(0);
+    }
+
+    // 2. Encoder (AS5600)
+    if (config.enc_model === 'as5600') {
+        $('bus1_mag').value = 'angle';
+        onBusMagChange(1);
+        $('bus1_sensor').value = 'as5600';
+        onBusSensorChange(1);
+    }
+
+    // 3. ToF / Distancia
+    const tof = config.tof_model;
+    if (tof && tof !== 'none') {
+        if (tof === 'tofsense' || tof === 'tfmini_s') {
+            $('pin67_mode').value = 'uart';
+            onPin67ModeChange();
+            $('uart_sensor').value = tof;
+            onUartSensorChange();
+        } else {
+            $('bus0_mag').value = 'distance';
+            onBusMagChange(0);
+            $('bus0_sensor').value = tof;
+            onBusSensorChange(0);
+        }
+    }
+}
 
 function copyDataToClipboard() {
     const tabConf = TAB_CONFIG[currentTab];
@@ -2174,6 +2609,58 @@ function copyDataToClipboard() {
     }
 }
 
+const SENSOR_FREQUENCIES = {
+    vi5300: [
+        { value: '11', label: '90 Hz (11 ms) — Máximo VI5300' },
+        { value: '15', label: '65 Hz (15 ms) — Empírico 1m' },
+        { value: '20', label: '50 Hz (20 ms)' },
+        { value: '33', label: '30 Hz (33 ms) — Optimizado 1.2m' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    vl53l1x: [
+        { value: '20', label: '50 Hz (20 ms) — Máximo Short' },
+        { value: '33', label: '30 Hz (33 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    vl53lxx: [
+        { value: '20', label: '50 Hz (20 ms) — Máximo Short' },
+        { value: '33', label: '30 Hz (33 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    vl53l0x: [
+        { value: '20', label: '50 Hz (20 ms) — Máximo Short' },
+        { value: '33', label: '30 Hz (33 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    tofsense: [
+        { value: '10', label: '100 Hz (10 ms) — Recomendado' },
+        { value: '20', label: '50 Hz (20 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    tfmini_s: [
+        { value: '10', label: '100 Hz (10 ms) — Recomendado' },
+        { value: '20', label: '50 Hz (20 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ],
+    vl53l5cx: [
+        { value: '66', label: '15 Hz (66 ms) — Máximo' },
+        { value: '100', label: '10 Hz (100 ms)' },
+        { value: '200', label: '5 Hz (200 ms)' }
+    ],
+    default: [
+        { value: '10', label: '100 Hz (10 ms) — Recomendado' },
+        { value: '20', label: '50 Hz (20 ms)' },
+        { value: '50', label: '20 Hz (50 ms)' },
+        { value: '100', label: '10 Hz (100 ms)' }
+    ]
+};
+
 function updateToFUI() {
     const modelEl = $('tof_model');
     if (!modelEl) return;
@@ -2181,9 +2668,27 @@ function updateToFUI() {
     const desc = $('tof_model_desc');
     const rangeContainer = $('tof_range_container');
     
-    if (desc) desc.textContent = TOF_INFO[model] || 'Modelo estándar I2C.';
+    if (desc) desc.innerHTML = TOF_INFO[model] || 'Modelo estándar I2C.';
     if (rangeContainer) {
-        rangeContainer.style.display = (model === 'vl53l0x') ? 'block' : 'none';
+        rangeContainer.style.display = (model === 'vl53l0x' || model === 'vl53l1x' || model === 'vl53lxx' || model === 'vl53l1xv2') ? 'block' : 'none';
+    }
+    
+    const srEl = $('sample_rate');
+    if (srEl) {
+        const prevValue = srEl.value;
+        srEl.innerHTML = '';
+        const opts = SENSOR_FREQUENCIES[model] || SENSOR_FREQUENCIES.default;
+        opts.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.value;
+            opt.textContent = o.label;
+            srEl.appendChild(opt);
+        });
+        if (Array.from(srEl.options).some(o => o.value === prevValue)) {
+            srEl.value = prevValue;
+        } else {
+            srEl.selectedIndex = 0;
+        }
     }
 }
 
@@ -2296,7 +2801,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const titleEl = document.querySelector('.title-block h1');
             if (titleEl) {
                 titleEl.innerHTML = (cfg.lab_name || 'Physys Lab') +
-                    ' <span class="v-tag">' + (cfg.version || 'v9.0') + '</span>';
+                    ' <span class="v-tag">' + (cfg.version || 'V_1_16_07_26') + '</span>';
             }
             if (cfg.lab_name) {
                 localStorage.setItem('physys_lab_name', cfg.lab_name);
@@ -2661,6 +3166,26 @@ function populatePinSelectors() {
         const isBasic = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7 && p.led_rgb == 48);
         const isCam = (p.tof_sda == 1 && p.tof_scl == 47 && p.enc_sda == 14 && p.enc_scl == 21 && p.hx_dt == 41 && p.hx_sck == 42 && (!p.led_rgb || p.led_rgb == 48));
         
+        // Actualizar subtítulos dinámicamente en las tarjetas de la configuración
+        const b0Sub = $('bus0_subtitle');
+        if (b0Sub) b0Sub.textContent = `GPIO ${p.tof_sda} (SDA) / ${p.tof_scl} (SCL)`;
+        
+        const b1Sub = $('bus1_subtitle');
+        if (b1Sub) b1Sub.textContent = `GPIO ${p.enc_sda} (SDA) / ${p.enc_scl} (SCL)`;
+        
+        const p67Header = $('pin67_header');
+        if (p67Header) p67Header.textContent = `GPIO ${p.hx_dt}/${p.hx_sck}`;
+        
+        const p67Sub = $('pin67_subtitle');
+        if (p67Sub) {
+            const isBasicProfile = (p.tof_sda == 4 && p.tof_scl == 5 && p.enc_sda == 10 && p.enc_scl == 11 && p.hx_dt == 6 && p.hx_sck == 7);
+            if (isBasicProfile) {
+                p67Sub.innerHTML = `HX711 (GPIO ${p.hx_dt}/${p.hx_sck}) o UART (GPIO 18/17)`;
+            } else {
+                p67Sub.innerHTML = `Compartido: HX711 o UART`;
+            }
+        }
+
         const profileSelect = $('pin-profile-select');
         if (profileSelect) {
             if (isBasic) {

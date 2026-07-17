@@ -23,10 +23,12 @@
 #include <SparkFun_VL53L5CX_Library.h>
 #include <AS5600.h>
 #include <HX711.h>
+#include <SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>
 #include <FastLED.h>
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include "UsbHostMSC.h" // Wrapper de la librería chegewara
+#include <VI5300_API.h>
 
 Preferences preferences;
 UsbHostMSC usbHost;
@@ -71,13 +73,24 @@ VL53L1X  tof1X;
 VL6180X  tof6180;
 SparkFun_VL53L5CX tof5CX;
 
-enum ToFModel { MODEL_L0X, MODEL_L1X, MODEL_L1X_V2, MODEL_6180, MODEL_L5CX };
+enum ToFModel { MODEL_L0X, MODEL_L1X, MODEL_L1X_V2, MODEL_6180, MODEL_L5CX, MODEL_TOFSENSE, MODEL_TFMINI_S, MODEL_TOF10120, MODEL_VI5300, MODEL_NONE };
 ToFModel activeToF = MODEL_L0X;
 String currentToFModel = "vl53l0x";
+String currentEncoderModel = "as5600";
+String currentWeightMode = "hx711";
 int sampleRateMs = 10; // Frecuencia por defecto: 100 Hz (10 ms)
 
-AS5600 encoder(&I2C_ENC);  // AS5600 en Bus 1
+// UART para sensores de distancia (TOFSense, TFmini-S) en pines HX711 cuando no hay HX711
+HardwareSerial uartSensor(1);
+bool uartSensorReady = false;
+
+AS5600 encoder(&I2C_ENC);  // AS5600 default en Bus 1
+AS5600 encoder_alt(&I2C_TOF); // AS5600 alternativo en Bus 0
+AS5600* activeEncoder = &encoder; // Puntero al encoder activo
+TwoWire* tofBus = &I2C_TOF; // Puntero al bus donde está el ToF
 HX711 loadCell;
+NAU7802 nauScale;
+bool useNAU7802 = false;
 CRGB leds[NUM_LEDS];
 
 // Particiones LittleFS
@@ -200,11 +213,198 @@ void blinkLED(CRGB color, int times, int delayMs) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DRIVERS DE SENSORES MANUALES (TOF10120 y VI5300)
+// ═══════════════════════════════════════════════════════════════
+float readToF10120(TwoWire& bus) {
+  bus.beginTransmission(0x52);
+  bus.write(0x00);
+  bus.endTransmission(false);
+  bus.requestFrom((uint8_t)0x52, (uint8_t)2);
+  if (bus.available() >= 2) {
+    uint8_t high = bus.read();
+    uint8_t low = bus.read();
+    uint16_t dist = (high << 8) | low;
+    if (dist > 0 && dist < 2500) return (float)dist;
+  }
+  return -1;
+}
+
+bool validateI2CDevice(TwoWire& bus, uint8_t addr) {
+  // 1. Probar conexión básica
+  bus.beginTransmission(addr);
+  if (bus.endTransmission() != 0) {
+    return false;
+  }
+  
+  // 2. Validación específica por dirección para descartar buses flotantes
+  if (addr == 0x29) {
+    // VL53L0X / VL53L1X / VL53L5CX: leer un registro y verificar que no sea 0x00 ni 0xFF
+    bus.beginTransmission(addr);
+    bus.write(0xC0); // IDENTIFICATION_MODEL_ID
+    if (bus.endTransmission() != 0) return false;
+    if (bus.requestFrom(addr, (uint8_t)1) == 1) {
+      uint8_t id = bus.read();
+      return (id != 0x00 && id != 0xFF);
+    }
+    return false;
+  }
+  else if (addr == 0x36) {
+    // AS5600: leer STATUS (0x0B), ZMCO (0x0C), RAW ANGLE MSB (0x0D)
+    // Descartar bus flotante (todo 0x00 o todo 0xFF)
+    bus.beginTransmission(addr);
+    bus.write(0x0B);
+    if (bus.endTransmission() != 0) return false;
+    if (bus.requestFrom(addr, (uint8_t)3) == 3) {
+      uint8_t status = bus.read();
+      uint8_t zmco = bus.read();
+      uint8_t raw_msb = bus.read();
+      if ((status == 0x00 && zmco == 0x00 && raw_msb == 0x00) ||
+          (status == 0xFF && zmco == 0xFF && raw_msb == 0xFF)) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+  else if (addr == 0x6C) {
+    // VI5300 (0x6C): leer chip ID (0x06), debe retornar 0xD8
+    bus.beginTransmission(addr);
+    bus.write(0x06);
+    if (bus.endTransmission() != 0) return false;
+    if (bus.requestFrom(addr, (uint8_t)1) == 1) {
+      uint8_t id = bus.read();
+      return (id == 0xD8);
+    }
+    return false;
+  }
+  else if (addr == 0x52) {
+    // TOF10120: leer 2 bytes, no deben ser ambos 0x00 o 0xFF
+    if (bus.requestFrom(addr, (uint8_t)2) == 2) {
+      uint8_t b1 = bus.read();
+      uint8_t b2 = bus.read();
+      if ((b1 == 0x00 && b2 == 0x00) || (b1 == 0xFF && b2 == 0xFF)) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+  else if (addr == 0x2A) {
+    // NAU7802: leer Revision ID (0x1F), debe ser 0x0F
+    bus.beginTransmission(addr);
+    bus.write(0x1F);
+    if (bus.endTransmission() != 0) return false;
+    if (bus.requestFrom(addr, (uint8_t)1) == 1) {
+      uint8_t rev = bus.read();
+      return (rev == 0x0F);
+    }
+    return false;
+  }
+  else {
+    // Caso por defecto para otras direcciones
+    if (bus.requestFrom(addr, (uint8_t)1) == 1) {
+      uint8_t b = bus.read();
+      return (b != 0x00 && b != 0xFF);
+    }
+    return false;
+  }
+}
+
+bool initToF10120(TwoWire& bus) {
+  if (validateI2CDevice(bus, 0x52)) {
+    Serial.println("[OK] ToF10120 detectado en 0x52");
+    return true;
+  }
+  return false;
+}
+
+void configureVI5300Params(uint8_t &fps, uint32_t &intecounts) {
+  uint32_t target_fps = 1000 / max(sampleRateMs, 2);
+  if (target_fps < 1) target_fps = 1;
+  
+  if (state.tofRange == "long") {
+    // Modo largo: máxima integración para rango completo, cap a 15 FPS
+    intecounts = 262144;
+    fps = min((uint32_t)15, target_fps);
+  } else {
+    // Limitar FPS por capacidad de hardware del VI5300
+    fps = min((uint32_t)90, target_fps);
+    if (fps < 1) fps = 1;
+    
+    // Calcular tiempo de frame basado en los FPS reales
+    uint32_t fps_time_ns = 1000000000 / fps;
+    
+    // Para evitar subdesbordamiento en el cálculo del delay:
+    // intecounts * 146.3 <= fps_time_ns - 2,000,000
+    if (fps_time_ns > 2000000) {
+      uint32_t max_inte = (fps_time_ns - 2000000) * 10 / 1463;
+      if (max_inte > 200000) max_inte = 200000; // Cap para evitar valores excesivos
+      if (max_inte < 30000) max_inte = 30000;   // Mínimo de integración razonable
+      intecounts = max_inte;
+    } else {
+      intecounts = 30000;
+    }
+  }
+}
+
+bool initVI5300(TwoWire& bus) {
+  tofBus = &bus;
+  gSalve = 0xD8; // gSalve se maneja en 8-bit en la API de VisionICs (0x6C << 1)
+  
+  uint8_t id = VI5300_Device_Check();
+  if (id != 0xD8) {
+    Serial.printf("[ERR] VI5300 check falló. ID leído = 0x%02X (esperado 0xD8)\n", id);
+    return false;
+  }
+  
+  Serial.println("[VI5300] Chip detectado nativamente. Descargando firmware oficial...");
+  VI5300_init(); // Carga FW + Set_Integralcounts_Frame(30, 131072) por defecto
+  
+  // Verificar si el firmware se cargó con éxito leyendo el registro de estado de ejecución
+  uint8_t stat = 0;
+  ReadOneReg(0x08, &stat);
+  if (stat != 0x55 && stat != 0x66) {
+    Serial.printf("[ERR] VI5300 firmware run check falló: 0x%02X\n", stat);
+    return false;
+  }
+  
+  // Configurar FPS y rango de manera dinámica y segura
+  uint8_t fps;
+  uint32_t intecounts;
+  configureVI5300Params(fps, intecounts);
+  VI5300_Set_Integralcounts_Frame(fps, intecounts);
+  
+  if (VI5300_Start_Continuous_Measure() != VI5300_OK) {
+    Serial.println("[ERR] VI5300 error al iniciar medición continua");
+    return false;
+  }
+  
+  Serial.printf("[OK] VI5300 inicializado: %d FPS, intecounts=%u, modo %s\n",
+                fps, intecounts, state.tofRange == "long" ? "Long" : "Short");
+  return true;
+}
+
+float readVI5300(TwoWire& bus) {
+  tofBus = &bus;
+  VI5300_Dist_TypeDef distData;
+  VI5300_Status status = VI5300_Get_Measure_Data(&distData);
+  if (status == VI5300_OK) {
+    // Confianza > 10 y rango plausible (0-5000 mm para el VI5300)
+    if (distData.confidence > 10 && distData.millimeter >= 0 && distData.millimeter < 5000) {
+      return (float)distData.millimeter;
+    }
+  }
+  return -1; // Dato inválido → se conserva la última lectura válida
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CONFIGURACIÓN PERSISTENTE
 // ═══════════════════════════════════════════════════════════════
 void loadSettings() {
   preferences.begin("physys", true);
   currentToFModel = preferences.getString("tof_model", "vl53l0x");
+  currentEncoderModel = preferences.getString("enc_model", "as5600");
+  currentWeightMode = preferences.getString("weight_mode", "hx711");
   usbLogActive = preferences.getBool("usb_log", false);
   sampleRateMs = preferences.getInt("sample_rate", 10); // Default 100Hz (10ms)
   state.invertEncoder = preferences.getBool("inv_enc", false);
@@ -224,6 +424,8 @@ void loadSettings() {
   // Validaciones de seguridad - Forzar 10ms (100Hz) si no es válido o es la primera vez
   if (sampleRateMs < 2 || sampleRateMs > 1000) sampleRateMs = 10;
   if (currentToFModel == "" || currentToFModel.length() < 3) currentToFModel = "vl53l0x";
+  if (currentEncoderModel == "") currentEncoderModel = "as5600";
+  if (currentWeightMode == "") currentWeightMode = "hx711";
 
   // Auto-recuperación de Bootloop: Si NVS tiene el preset de cámara que causa crash, revertir.
   bool badPreset1 = (pinTofSda == 1 && pinTofScl == 2 && pinEncSda == 3 && pinEncScl == 14 && pinHxDt == 21 && pinHxSck == 26);
@@ -237,8 +439,8 @@ void loadSettings() {
     pinHxDt = 6; pinHxSck = 7;
   }
 
-  Serial.printf("[NVS] Configuración cargada: ToF=%s, USB_Log=%d, Rate=%d ms (%d Hz)\n", 
-                currentToFModel.c_str(), usbLogActive, sampleRateMs, 1000/sampleRateMs);
+  Serial.printf("[NVS] Configuración cargada: ToF=%s, Enc=%s, Peso=%s, USB_Log=%d, Rate=%d ms (%d Hz)\n", 
+                currentToFModel.c_str(), currentEncoderModel.c_str(), currentWeightMode.c_str(), usbLogActive, sampleRateMs, 1000/sampleRateMs);
   
   if (currentToFModel == "vl53l0x") {
     activeToF = MODEL_L0X;
@@ -256,6 +458,26 @@ void loadSettings() {
     activeToF = MODEL_L5CX;
     state.distMin = 20;
     state.distMax = 4000;
+  } else if (currentToFModel == "tofsense") {
+    activeToF = MODEL_TOFSENSE;
+    state.distMin = 10;
+    state.distMax = 25000; // TOFSense hasta 25m
+  } else if (currentToFModel == "tfmini_s") {
+    activeToF = MODEL_TFMINI_S;
+    state.distMin = 10;
+    state.distMax = 12000; // TFmini-S hasta 12m
+  } else if (currentToFModel == "tof10120") {
+    activeToF = MODEL_TOF10120;
+    state.distMin = 10;
+    state.distMax = 2000;
+  } else if (currentToFModel == "vi5300") {
+    activeToF = MODEL_VI5300;
+    state.distMin = 20;
+    state.distMax = 4000;
+  } else if (currentToFModel == "none") {
+    activeToF = MODEL_NONE;
+    state.distMin = 0;
+    state.distMax = 0;
   } else {
     activeToF = MODEL_L0X;
     state.distMin = 30;
@@ -264,12 +486,15 @@ void loadSettings() {
 }
 
 void saveSettings() {
-  Serial.printf("[NVS] Guardando: ToF=%s, Rate=%d ms, InvEnc=%d\n", currentToFModel.c_str(), sampleRateMs, state.invertEncoder);
+  Serial.printf("[NVS] Guardando: ToF=%s, Enc=%s, Peso=%s, Rate=%d ms, InvEnc=%d\n", 
+                currentToFModel.c_str(), currentEncoderModel.c_str(), currentWeightMode.c_str(), sampleRateMs, state.invertEncoder);
   if (!preferences.begin("physys", false)) {
     Serial.println("[ERR] No se pudo abrir NVS para escritura");
     return;
   }
   preferences.putString("tof_model", currentToFModel);
+  preferences.putString("enc_model", currentEncoderModel);
+  preferences.putString("weight_mode", currentWeightMode);
   preferences.putBool("usb_log", usbLogActive);
   preferences.putInt("sample_rate", sampleRateMs);
   preferences.putBool("inv_enc", state.invertEncoder);
@@ -288,20 +513,93 @@ void saveSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DIAGNÓSTICO I2C
+// ═══════════════════════════════════════════════════════════════
+// Recuperación de bus I2C bloqueado (SDA atascado en LOW)
+// Envía 9 pulsos de reloj + condición STOP para liberar el esclavo
+void recoverI2C(int sda, int scl) {
+  pinMode(scl, OUTPUT);
+  pinMode(sda, INPUT_PULLUP);
+  delayMicroseconds(10);
+  // Si SDA está libre, no hay nada que recuperar
+  if (digitalRead(sda) == HIGH) return;
+  Serial.printf("[I2C] Bus SDA=%d atascado, recuperando...\n", sda);
+  for (int i = 0; i < 9; i++) {
+    digitalWrite(scl, LOW);
+    delayMicroseconds(5);
+    digitalWrite(scl, HIGH);
+    delayMicroseconds(5);
+    if (digitalRead(sda) == HIGH) break; // SDA liberado
+  }
+  // Generar condición STOP
+  pinMode(sda, OUTPUT);
+  digitalWrite(sda, LOW);
+  delayMicroseconds(5);
+  digitalWrite(scl, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(sda, HIGH);
+  delayMicroseconds(5);
+  Serial.println("[I2C] Bus recuperado");
+}
+
+void scanI2C(TwoWire& bus, const char* busName) {
+  Serial.printf("[I2C SCAN] %s: ", busName);
+  int found = 0;
+  // Solo escanear direcciones conocidas para evitar bloqueos largos
+  uint8_t knownAddrs[] = {0x29, 0x36, 0x2A, 0x52, 0x6C, 0x10, 0x08};
+  for (int i = 0; i < 7; i++) {
+    if (validateI2CDevice(bus, knownAddrs[i])) {
+      Serial.printf("0x%02X ", knownAddrs[i]);
+      found++;
+    }
+  }
+  Serial.println(found == 0 ? "ningún dispositivo" : "");
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INICIALIZACIÓN DE SENSORES
 // ═══════════════════════════════════════════════════════════════
 void initSensors() {
-  // Bus I2C #0 — ToF (Varios modelos)
+  // Recuperar buses I2C si están bloqueados (antes de Wire.begin)
+  recoverI2C(pinTofSda, pinTofScl);
+  recoverI2C(pinEncSda, pinEncScl);
+
+  // Bus I2C #0 — ToF
   I2C_TOF.begin(pinTofSda, pinTofScl);
   I2C_TOF.setClock(400000);
-  I2C_TOF.setTimeOut(10); // Previene bloqueos por bus ocupado/flotante (10ms)
+  I2C_TOF.setTimeOut(100);
+  scanI2C(I2C_TOF, "Bus0");
+
+  // Bus I2C #1 — Encoder (inicializar ANTES de auto-detección)
+  I2C_ENC.begin(pinEncSda, pinEncScl);
+  I2C_ENC.setClock(400000);
+  I2C_ENC.setTimeOut(100);
+  scanI2C(I2C_ENC, "Bus1");
+
+  // ── Auto-detección: ¿en qué bus está el ToF? ──
+  tofBus = &I2C_TOF; // default Bus 0
+  bool tofOnBus0 = false;
+  bool tofOnBus1 = false;
+  
+  uint8_t targetAddr = (currentToFModel == "vi5300") ? 0x6C : 0x29;
+  tofOnBus0 = validateI2CDevice(I2C_TOF, targetAddr);
+  tofOnBus1 = validateI2CDevice(I2C_ENC, targetAddr);
+  
+  if (!tofOnBus0 && tofOnBus1) {
+    tofBus = &I2C_ENC;
+    Serial.printf("[I2C] ToF detectado en Bus 1 (GPIO %d/%d)\n", pinEncSda, pinEncScl);
+  } else if (tofOnBus0) {
+    Serial.printf("[I2C] ToF detectado en Bus 0 (GPIO %d/%d)\n", pinTofSda, pinTofScl);
+  } else {
+    Serial.printf("[WARN] ToF (0x%02X) no detectado en ningún bus\n", targetAddr);
+  }
 
   state.tofReady = false;
   switch (activeToF) {
     case MODEL_L0X:
-      tof0X.setBus(&I2C_TOF);
+      tof0X.setBus(tofBus);
       if (tof0X.init()) {
-        tof0X.setTimeout(10); // Evitar bloqueos infinitos de la librería si se desconecta
+        tof0X.setTimeout(100); // Evitar bloqueos infinitos de la librería si se desconecta
         if (state.tofRange == "long") {
             // Habilitar perfil "Long Range" para alcanzar 2 metros
             tof0X.setSignalRateLimit(0.1);
@@ -329,36 +627,40 @@ void initSensors() {
       break;
     case MODEL_L1X:
     case MODEL_L1X_V2:
-      tof1X.setBus(&I2C_TOF);
+      tof1X.setBus(tofBus);
       if (tof1X.init()) {
-        tof1X.setTimeout(10); // Evitar bloqueos infinitos
-        if (sampleRateMs <= 20) {
-          tof1X.setDistanceMode(VL53L1X::Short);
+        tof1X.setTimeout(100); // Evitar bloqueos infinitos
+        // Respetar el selector tofRange del usuario (igual que VL53L0X)
+        if (state.tofRange == "short") {
+          tof1X.setDistanceMode(VL53L1X::Short);  // Hasta 1.3m, inmune a luz ambiente
         } else {
-          tof1X.setDistanceMode(VL53L1X::Long);
+          tof1X.setDistanceMode(VL53L1X::Long);   // Hasta 4m, más sensible a luz
         }
         uint32_t budgetUs = (sampleRateMs * 1000);
-        if (budgetUs < 15000) budgetUs = 15000; 
+        // Mínimo 15ms en Short, 20ms en Long (según Pololu/ST)
+        uint32_t minBudget = (state.tofRange == "short") ? 15000 : 20000;
+        if (budgetUs < minBudget) budgetUs = minBudget;
         tof1X.setMeasurementTimingBudget(budgetUs);
         
         uint32_t periodMs = budgetUs / 1000;
         if (periodMs < (uint32_t)sampleRateMs) periodMs = sampleRateMs;
         tof1X.startContinuous(periodMs);
         state.tofReady = true;
-        Serial.printf("[OK] VL53L1X inicializado a %d ms (Budget: %d us)\n", periodMs, budgetUs);
+        Serial.printf("[OK] VL53L1X inicializado: %d ms (Budget: %u us, Modo %s)\n",
+                      periodMs, budgetUs, state.tofRange == "short" ? "Short" : "Long");
       } else {
         Serial.println("[ERR] Fallo al inicializar VL53L1X");
       }
       break;
     case MODEL_6180:
-      tof6180.setBus(&I2C_TOF);
+      tof6180.setBus(tofBus);
       tof6180.init();
       tof6180.configureDefault();
       state.tofReady = true;
       Serial.println("[OK] VL6180X (ToF) inicializado");
       break;
     case MODEL_L5CX:
-      if (tof5CX.begin(0x29, I2C_TOF)) {
+      if (tof5CX.begin(0x29, *tofBus)) {
         tof5CX.setResolution(8 * 8);
         int freq = 1000 / sampleRateMs;
         if (freq > 15) freq = 15;
@@ -368,33 +670,114 @@ void initSensors() {
         Serial.printf("[OK] VL53L5CX (ToF) inicializado a %d Hz\n", freq);
       }
       break;
+    case MODEL_TOFSENSE:
+    case MODEL_TFMINI_S:
+      // Estos se inicializan por UART, no por I2C (ver bloque UART abajo)
+      break;
+    case MODEL_TOF10120:
+      state.tofReady = initToF10120(*tofBus);
+      break;
+    case MODEL_VI5300:
+      state.tofReady = initVI5300(*tofBus);
+      break;
   }
 
-  if (!state.tofReady) {
+  if (!state.tofReady && activeToF != MODEL_NONE) {
     Serial.printf("[WARN] Sensor ToF %s no encontrado en Bus0\n", currentToFModel.c_str());
   }
 
-  // AS5600 (Encoder Magnético) en Bus 1
-  I2C_ENC.begin(pinEncSda, pinEncScl);
-  I2C_ENC.setClock(400000);
-  I2C_ENC.setTimeOut(10); // Previene bloqueos por bus ocupado/flotante (10ms)
-  encoder.begin(255); 
-  if (encoder.isConnected()) {
-    state.encoderReady = true;
-    Serial.println("[OK] AS5600 (Encoder) en Bus1 GPIO10/11");
+  // AS5600 (Encoder Magnético) — inicializar solo si no está deshabilitado
+  state.encoderReady = false;
+  if (currentEncoderModel != "none") {
+    // Detectar AS5600 (0x36) en Bus 1 primero, luego Bus 0
+    activeEncoder = &encoder; // default Bus 1
+    encoder.begin(255);
+    if (validateI2CDevice(I2C_ENC, 0x36)) {
+      state.encoderReady = true;
+      Serial.printf("[OK] AS5600 (Encoder) en Bus1 (SDA:%d, SCL:%d)\n", pinEncSda, pinEncScl);
+    } else {
+      // Intentar en Bus 0
+      encoder_alt.begin(255);
+      if (validateI2CDevice(I2C_TOF, 0x36)) {
+        activeEncoder = &encoder_alt;
+        state.encoderReady = true;
+        Serial.printf("[OK] AS5600 (Encoder) en Bus0 (SDA:%d, SCL:%d)\n", pinTofSda, pinTofScl);
+      } else {
+        Serial.println("[WARN] AS5600 no encontrado en ningún bus");
+      }
+    }
   } else {
-    Serial.println("[WARN] AS5600 no encontrado en Bus1");
+    Serial.println("[NVS] AS5600 (Encoder) deshabilitado por configuración");
   }
 
-  // HX711 (Celda de Carga)
-  loadCell.begin(pinHxDt, pinHxSck);
-  if (loadCell.is_ready()) {
-    loadCell.set_scale(420.0);
-    loadCell.tare();
-    state.loadCellReady = true;
-    Serial.println("[OK] HX711 inicializado");
-  } else {
-    Serial.println("[WARN] HX711 no encontrado");
+  // Celda de carga / Peso
+  state.loadCellReady = false;
+  useNAU7802 = false;
+
+  if (currentWeightMode == "hx711") {
+    // Solo HX711
+    loadCell.begin(pinHxDt, pinHxSck);
+    if (loadCell.is_ready()) {
+      loadCell.set_scale(420.0);
+      loadCell.tare();
+      state.loadCellReady = true;
+      Serial.println("[OK] HX711 inicializado");
+    } else {
+      Serial.println("[WARN] HX711 no encontrado");
+    }
+  } 
+  else if (currentWeightMode == "nau7802") {
+    // Solo NAU7802
+    if (nauScale.begin(I2C_TOF)) {
+      nauScale.calculateZeroOffset(64);
+      state.loadCellReady = true;
+      useNAU7802 = true;
+      Serial.println("[OK] NAU7802 en Bus0 inicializado");
+    } else if (nauScale.begin(I2C_ENC)) {
+      nauScale.calculateZeroOffset(64);
+      state.loadCellReady = true;
+      useNAU7802 = true;
+      Serial.println("[OK] NAU7802 en Bus1 inicializado");
+    } else {
+      Serial.println("[WARN] NAU7802 no encontrado");
+    }
+  }
+  else {
+    Serial.println("[NVS] Celdas de peso deshabilitadas por configuración");
+  }
+
+  // UART para sensores de distancia (usa pines dedicados 18/17 en perfil básico, o pines compartidos en cámara/personalizado)
+  uartSensorReady = false;
+  if (activeToF == MODEL_TOFSENSE || activeToF == MODEL_TFMINI_S) {
+    bool isBasic = (pinTofSda == 4 && pinTofScl == 5 && pinEncSda == 10 && pinEncScl == 11 && pinHxDt == 6 && pinHxSck == 7);
+    int rxPin = isBasic ? 18 : pinHxDt;
+    int txPin = isBasic ? 17 : pinHxSck;
+    
+    bool sharedPins = (rxPin == pinHxDt || txPin == pinHxSck);
+    if (sharedPins && state.loadCellReady) {
+      Serial.printf("[WARN] Conflicto de pines: No se puede iniciar UART ToF porque la celda de carga está activa en los mismos pines (GPIO %d/%d).\n", pinHxDt, pinHxSck);
+    } else {
+      if (activeToF == MODEL_TOFSENSE) {
+        // TOFSense: intentar 921600 primero, fallback a 115200
+        uartSensor.begin(921600, SERIAL_8N1, rxPin, txPin);
+        delay(500);
+        if (!uartSensor.available()) {
+          uartSensor.end();
+          uartSensor.begin(115200, SERIAL_8N1, rxPin, txPin);
+          Serial.println("[TOFSense] Sin datos a 921600, fallback a 115200 bps");
+          delay(200);
+        } else {
+          Serial.println("[TOFSense] Conectado a 921600 bps");
+        }
+      } else {
+        // TFmini-S: siempre 115200
+        uartSensor.begin(115200, SERIAL_8N1, rxPin, txPin);
+      }
+      uartSensorReady = true;
+      state.tofReady = true;
+      Serial.printf("[OK] %s UART en GPIO %d/%d (RX/TX)\n",
+        (activeToF == MODEL_TOFSENSE) ? "TOFSense" : "TFmini-S", rxPin, txPin);
+    }
   }
 }
 
@@ -431,7 +814,14 @@ void readSensors() {
       if (tof1X.dataReady()) {
         dist = tof1X.readRangeContinuousMillimeters(false);
         timeout = tof1X.timeoutOccurred();
-        newTofData = true;
+        // Validar calidad: solo aceptar lecturas utilizables
+        uint8_t rs = tof1X.ranging_data.range_status;
+        if (rs == VL53L1X::RangeValid || rs == VL53L1X::RangeValidMinRangeClipped ||
+            rs == VL53L1X::RangeValidNoWrapCheckFail) {
+          newTofData = true;
+        }
+        // Si range_status indica error (SigmaFail, SignalFail, OutOfBounds, etc.)
+        // no marcamos newTofData → se conserva la última lectura válida
       }
     } else if (activeToF == MODEL_6180) {
       dist = tof6180.readRangeSingleMillimeters();
@@ -442,6 +832,71 @@ void readSensors() {
         if (tof5CX.getRangingData(&data)) {
           dist = data.distance_mm[0]; 
           newTofData = true;
+        }
+      }
+    } else if (activeToF == MODEL_TOF10120) {
+      float dVal = readToF10120(*tofBus);
+      if (dVal >= 0) {
+        dist = dVal;
+        newTofData = true;
+      }
+    } else if (activeToF == MODEL_VI5300) {
+      float dVal = readVI5300(*tofBus);
+      if (dVal >= 0) {
+        dist = dVal;
+        newTofData = true;
+      }
+    } else if (uartSensorReady && (activeToF == MODEL_TOFSENSE || activeToF == MODEL_TFMINI_S)) {
+      // Lectura UART de sensores de distancia
+      static uint8_t uartBuf[32];
+      static int uartIdx = 0;
+
+      // TOFSense: enviar trama de consulta periódica si está en modo pasivo
+      if (activeToF == MODEL_TOFSENSE) {
+        static unsigned long lastTofSenseQuery = 0;
+        if (now - lastTofSenseQuery >= 50) {
+          lastTofSenseQuery = now;
+          const uint8_t queryFrame[] = {0x57, 0x10, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x63};
+          uartSensor.write(queryFrame, sizeof(queryFrame));
+        }
+      }
+
+      while (uartSensor.available()) {
+        uint8_t b = uartSensor.read();
+
+        if (activeToF == MODEL_TFMINI_S) {
+          // TFmini-S: Frame 9 bytes, header 0x59 0x59
+          if (uartIdx == 0 && b != 0x59) continue;
+          if (uartIdx == 1 && b != 0x59) { uartIdx = 0; continue; }
+          uartBuf[uartIdx++] = b;
+          if (uartIdx >= 9) {
+            uint8_t ck = 0;
+            for (int i = 0; i < 8; i++) ck += uartBuf[i];
+            if (ck == uartBuf[8]) {
+              uint16_t rawDist = uartBuf[2] | (uartBuf[3] << 8);
+              // Algunos modelos reportan en cm, otros en mm.
+              // Si el valor es < 1200 y el rango máximo es 12m (1200cm), asumimos cm y convertimos a mm.
+              dist = (rawDist < 1200) ? (float)(rawDist * 10) : (float)rawDist;
+              newTofData = true;
+            }
+            uartIdx = 0;
+            break;
+          }
+        } else {
+          // TOFSense: Frame 16 bytes, header 0x57
+          if (uartIdx == 0 && b != 0x57) continue;
+          uartBuf[uartIdx++] = b;
+          if (uartIdx >= 16) {
+            uint8_t ck = 0;
+            for (int i = 0; i < 15; i++) ck += uartBuf[i];
+            if (ck == uartBuf[15]) {
+              uint32_t raw = uartBuf[8] | (uartBuf[9] << 8) | (uartBuf[10] << 16);
+              dist = (float)raw; // mm
+              newTofData = true;
+            }
+            uartIdx = 0;
+            break;
+          }
         }
       }
     }
@@ -536,7 +991,7 @@ void readSensors() {
   }
 
   if (state.encoderReady) {
-    int rawAngle = encoder.readAngle(); 
+    int rawAngle = activeEncoder->readAngle(); 
     
     if (state.lastRawAngle == -1) {
       state.lastRawAngle = rawAngle;
@@ -563,19 +1018,34 @@ void readSensors() {
     state.prevAngleRad = state.lastAngleRad;
   }
 
-  if (state.loadCellReady && loadCell.is_ready()) {
-    long rawValue = loadCell.read();
-    if (state.hxHighStability) {
-      rawValue = (rawValue >> 8) << 8;
-    }
-    float raw = (float)(rawValue - loadCell.get_offset()) / loadCell.get_scale();
+  if (state.loadCellReady) {
+    if (useNAU7802) {
+      // Lectura NAU7802 por I2C
+      if (nauScale.available()) {
+        float raw = nauScale.getWeight();
+        if (state.useHxFilter) {
+          state.filteredWeight = (0.2f * raw) + (0.8f * state.filteredWeight);
+          state.lastWeight = state.filteredWeight;
+        } else {
+          state.lastWeight = raw;
+          state.filteredWeight = raw;
+        }
+      }
+    } else if (loadCell.is_ready()) {
+      // Lectura HX711 original
+      long rawValue = loadCell.read();
+      if (state.hxHighStability) {
+        rawValue = (rawValue >> 8) << 8;
+      }
+      float raw = (float)(rawValue - loadCell.get_offset()) / loadCell.get_scale();
 
-    if (state.useHxFilter) {
-      state.filteredWeight = (0.2f * raw) + (0.8f * state.filteredWeight);
-      state.lastWeight = state.filteredWeight;
-    } else {
-      state.lastWeight = raw;
-      state.filteredWeight = raw; 
+      if (state.useHxFilter) {
+        state.filteredWeight = (0.2f * raw) + (0.8f * state.filteredWeight);
+        state.lastWeight = state.filteredWeight;
+      } else {
+        state.lastWeight = raw;
+        state.filteredWeight = raw; 
+      }
     }
   }
 
@@ -612,6 +1082,8 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   if (type == WS_EVT_CONNECT) {
     JsonDocument doc;
     doc["config"]["tof_model"] = currentToFModel;
+    doc["config"]["enc_model"] = currentEncoderModel;
+    doc["config"]["weight_mode"] = currentWeightMode;
     doc["config"]["usb_log"] = usbLogActive;
     doc["config"]["sample_rate"] = sampleRateMs;
     doc["config"]["invert_encoder"] = state.invertEncoder;
@@ -734,20 +1206,76 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     }
     else if (msg == "TARE") {
       if (state.loadCellReady) {
-        loadCell.tare();
+        if (useNAU7802) {
+          nauScale.calculateZeroOffset(64);
+        } else {
+          loadCell.tare();
+        }
         Serial.println("[CMD] Celda de carga tarada");
       }
+    }
+    else if (msg == "SCAN_BUS") {
+      // Escaneo rápido de ambos buses I2C y reporte al WebSocket
+      JsonDocument scanDoc;
+      scanDoc["command"] = "BUS_SCAN";
+      
+      // Tabla de direcciones conocidas → sensor
+      struct KnownDev { uint8_t addr; const char* name; const char* mag; const char* volt; };
+      KnownDev devs[] = {
+        {0x29, "vl53l0x",  "distance", "3.3V"},
+        {0x36, "as5600",   "angle",    "3.3V"},
+        {0x2A, "nau7802",  "weight",   "3.3V"},
+        {0x52, "tof10120", "distance", "3.3-5V"},
+        {0x6C, "vi5300",   "distance", "3.3V"},
+        {0x10, "vi5300",   "distance", "3.3V"},
+      };
+      int nDevs = sizeof(devs) / sizeof(devs[0]);
+
+      for (int busIdx = 0; busIdx < 2; busIdx++) {
+        TwoWire& bus = (busIdx == 0) ? I2C_TOF : I2C_ENC;
+        String key = "bus" + String(busIdx);
+        JsonArray arr = scanDoc[key].to<JsonArray>();
+        for (int i = 0; i < nDevs; i++) {
+          if (validateI2CDevice(bus, devs[i].addr)) {
+            JsonObject o = arr.add<JsonObject>();
+            o["addr"] = String("0x") + String(devs[i].addr, HEX);
+            o["sensor"] = devs[i].name;
+            o["mag"] = devs[i].mag;
+            o["volt"] = devs[i].volt;
+          }
+        }
+      }
+      // Info de HX711/UART
+      scanDoc["hx711"] = state.loadCellReady && !useNAU7802;
+      scanDoc["uart"] = uartSensorReady;
+      
+      String scanJson;
+      serializeJson(scanDoc, scanJson);
+      client->text(scanJson);
+      Serial.printf("[CMD] SCAN_BUS enviado: %s\n", scanJson.c_str());
     }
     else if (msg.startsWith("SET_TOF:")) {
       currentToFModel = msg.substring(8);
       currentToFModel.toLowerCase();
       currentToFModel.trim();
       saveSettings();
-      Serial.printf("[CMD] Modelo ToF cambiado a: %s (Aplicará tras reinicio)\n", currentToFModel.c_str());
+      Serial.printf("[CMD] Modelo ToF cambiado a: %s\n", currentToFModel.c_str());
+    }
+    else if (msg.startsWith("SET_ENC:")) {
+      currentEncoderModel = msg.substring(8);
+      currentEncoderModel.toLowerCase();
+      currentEncoderModel.trim();
+      saveSettings();
+      Serial.printf("[CMD] Modelo Encoder cambiado a: %s\n", currentEncoderModel.c_str());
+    }
+    else if (msg.startsWith("SET_WEIGHT:")) {
+      currentWeightMode = msg.substring(11);
+      currentWeightMode.toLowerCase();
+      currentWeightMode.trim();
+      saveSettings();
+      Serial.printf("[CMD] Modo de Peso cambiado a: %s\n", currentWeightMode.c_str());
     }
     else if (msg.startsWith("SET_RATE:")) {
-      String clientIp = client->remoteIP().toString();
-      if (currentTeacherIp != clientIp && currentLeaderIp != clientIp) return; // PROTEGER
       int newRate = msg.substring(9).toInt();
       if (newRate >= 2 && newRate <= 1000) {
         sampleRateMs = newRate;
@@ -759,7 +1287,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         if (state.tofReady) {
           if (activeToF == MODEL_L0X) {
             tof0X.stopContinuous();
-            uint32_t budget = (sampleRateMs * 1000) - 2000;
+            uint32_t budget = (sampleRateMs * 1000);
             if (state.tofRange == "long") {
               if (budget < 33000) budget = 33000; 
             } else {
@@ -770,16 +1298,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
             Serial.printf("[HOT-CONFIG] VL53L0X reconfigurado: timing budget = %u us, rate = %d ms\n", budget, sampleRateMs);
           } else if (activeToF == MODEL_L1X || activeToF == MODEL_L1X_V2) {
             tof1X.stopContinuous();
-            if (sampleRateMs <= 20) {
+            if (state.tofRange == "short") {
               tof1X.setDistanceMode(VL53L1X::Short);
             } else {
               tof1X.setDistanceMode(VL53L1X::Long);
             }
             uint32_t budget = (sampleRateMs * 1000);
-            if (budget < 15000) budget = 15000; 
+            uint32_t minB = (state.tofRange == "short") ? 15000 : 20000;
+            if (budget < minB) budget = minB;
             tof1X.setMeasurementTimingBudget(budget);
             tof1X.startContinuous(sampleRateMs);
-            Serial.printf("[HOT-CONFIG] VL53L1X reconfigurado: timing budget = %u us, rate = %d ms\n", budget, sampleRateMs);
+            Serial.printf("[HOT-CONFIG] VL53L1X: budget=%u us, rate=%d ms, modo %s\n",
+                          budget, sampleRateMs, state.tofRange == "short" ? "Short" : "Long");
           } else if (activeToF == MODEL_L5CX) {
             tof5CX.stopRanging();
             int freq = 1000 / sampleRateMs;
@@ -788,6 +1318,15 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
             tof5CX.setRangingFrequency(freq);
             tof5CX.startRanging();
             Serial.printf("[HOT-CONFIG] VL53L5CX reconfigurado: freq = %d Hz\n", freq);
+          } else if (activeToF == MODEL_VI5300) {
+            VI5300_Stop_Continuous_Measure();
+            uint8_t fps;
+            uint32_t intecounts;
+            configureVI5300Params(fps, intecounts);
+            VI5300_Set_Integralcounts_Frame(fps, intecounts);
+            VI5300_Start_Continuous_Measure();
+            Serial.printf("[HOT-CONFIG] VI5300 reconfigurado: %d FPS, intecounts=%u, modo %s\n", 
+                          fps, intecounts, state.tofRange == "long" ? "Long" : "Short");
           }
         }
       }
@@ -925,6 +1464,8 @@ void setupAPI() {
     doc["sensors"]["usb"] = usbConnected;
     doc["measuring"] = state.measuring;
     doc["config"]["tof_model"] = currentToFModel;
+    doc["config"]["enc_model"] = currentEncoderModel;
+    doc["config"]["weight_mode"] = currentWeightMode;
     doc["config"]["usb_log"] = usbLogActive;
     doc["config"]["sample_rate"] = sampleRateMs;
     doc["config"]["invert_encoder"] = state.invertEncoder;
@@ -955,7 +1496,7 @@ void setupAPI() {
     if (SystemFS.exists("/config.json")) {
       req->send(SystemFS, "/config.json", "application/json");
     } else {
-      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab — UMNG\",\"version\":\"v9.0\"}");
+      req->send(200, "application/json", "{\"lab_name\":\"Physys Lab — UMNG\",\"version\":\"V_1_16_07_26\"}");
     }
   });
 
