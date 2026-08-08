@@ -318,7 +318,7 @@
                             <div class="sensor-config-box" style="margin-top:20px">
                                 <div class="sensor-config-header">
                                     <span class="sensor-icon">⚖️</span>
-                                    <h3>Celda de Carga (HX711)</h3>
+                                    <h3>Celda de Carga / Masa</h3>
                                 </div>
                                 <p class="config-desc">Amplificador para medición de masa y peso.</p>
                                 <div class="checkbox-row">
@@ -329,7 +329,11 @@
                                     <label class="switch"><input type="checkbox" id="config-hx-stability-check" onchange="toggleHxStability()"><span class="slider round"></span></label>
                                     <span>Estabilidad Alta (16-bit)</span>
                                 </div>
-                                <button id="btn-config-tare" class="btn-action btn-teal" style="width:100%;margin-top:10px" onclick="tareSensor()">⚖️ Tarar Celda</button>
+                                
+                                <label class="config-label" style="margin-top:15px; display:block;">Factor de Calibración</label>
+                                <input type="number" step="0.001" id="mass_cal" class="select-premium full-width" style="border:1px solid #334155; margin-top:4px;" value="420" placeholder="Ej: 420.0">
+                                
+                                <button id="btn-config-tare" class="btn-action btn-teal" style="width:100%;margin-top:15px" onclick="tareSensor()">⚖️ Tarar Celda</button>
                             </div>
 
                             <!-- ACCIONES DE SISTEMA -->

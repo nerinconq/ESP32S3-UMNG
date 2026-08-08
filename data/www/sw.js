@@ -1,6 +1,6 @@
 /* Physys Lab — Service Worker (Network First + Offline Fallback) */
 
-const CACHE_NAME = 'physys-V_1_16_07_26-1784263306';
+const CACHE_NAME = 'physys-V_1_16_07_26-1786164555';
 const CACHE_FILES = [
     '/',
     '/index.html',

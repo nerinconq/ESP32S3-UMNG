@@ -390,6 +390,10 @@ function updateDisplay(data) {
                 $('auto-stop-dist').value = data.config.tube_length;
             }
         }
+
+        if (data.config.mass_cal !== undefined && $('mass_cal') && document.activeElement !== $('mass_cal')) {
+            $('mass_cal').value = data.config.mass_cal;
+        }
     }
 
     const tabConf = TAB_CONFIG[currentTab];
@@ -1192,6 +1196,7 @@ function fetchSystemInfo() {
                 }
                 if (data.config.sample_rate) $('sample_rate').value = data.config.sample_rate;
                 if (data.config.usb_log !== undefined && $('usb-auto-log')) $('usb-auto-log').checked = data.config.usb_log;
+                if (data.config.mass_cal !== undefined && $('mass_cal')) $('mass_cal').value = data.config.mass_cal;
             }
             if (data.sensors) {
                 updateSensorBadges(data.sensors);
@@ -1539,6 +1544,7 @@ function saveAllConfig() {
 
     const rate = $('sample_rate').value;
     const tube = $('tube_length') ? $('tube_length').value : '0';
+    const massCal = $('mass_cal') ? $('mass_cal').value : '420.0';
     
     // Enviar comandos
     ws.send('SET_TOF:' + tofModel);
@@ -1546,6 +1552,7 @@ function saveAllConfig() {
     ws.send('SET_WEIGHT:' + weightMode);
     ws.send('SET_RATE:' + rate);
     ws.send('SET_TUBE:' + tube);
+    ws.send('SET_MASS_CAL:' + massCal);
     
     if ($('auto-stop-dist')) $('auto-stop-dist').value = tube; // Sincronizar visualmente
     
@@ -2203,6 +2210,9 @@ function fetchConfig() {
                 }
                 if (data.config.tof_range !== undefined && $('tof_range')) {
                     $('tof_range').value = data.config.tof_range;
+                }
+                if (data.config.mass_cal !== undefined && $('mass_cal')) {
+                    $('mass_cal').value = data.config.mass_cal;
                 }
                 
                 // Sincronizar selectores de buses

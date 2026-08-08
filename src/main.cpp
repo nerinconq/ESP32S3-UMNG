@@ -91,6 +91,7 @@ TwoWire* tofBus = &I2C_TOF; // Puntero al bus donde está el ToF
 HX711 loadCell;
 NAU7802 nauScale;
 bool useNAU7802 = false;
+float massCalibrationFactor = 420.0f; // Constante de calibración de masa (def: 420)
 CRGB leds[NUM_LEDS];
 
 // Particiones LittleFS
@@ -411,6 +412,7 @@ void loadSettings() {
   state.useHxFilter = preferences.getBool("hx_filter", true);
   state.hxHighStability = preferences.getBool("hx_high_stab", false);
   state.tofRange = preferences.getString("tof_range", "short");
+  massCalibrationFactor = preferences.getFloat("mass_cal", 420.0f);
   
   pinTofSda = preferences.getInt("pin_tof_sda", 4);
   pinTofScl = preferences.getInt("pin_tof_scl", 5);
@@ -486,8 +488,8 @@ void loadSettings() {
 }
 
 void saveSettings() {
-  Serial.printf("[NVS] Guardando: ToF=%s, Enc=%s, Peso=%s, Rate=%d ms, InvEnc=%d\n", 
-                currentToFModel.c_str(), currentEncoderModel.c_str(), currentWeightMode.c_str(), sampleRateMs, state.invertEncoder);
+  Serial.printf("[NVS] Guardando: ToF=%s, Enc=%s, Peso=%s, Rate=%d ms, InvEnc=%d, MassCal=%.3f\n", 
+                currentToFModel.c_str(), currentEncoderModel.c_str(), currentWeightMode.c_str(), sampleRateMs, state.invertEncoder, massCalibrationFactor);
   if (!preferences.begin("physys", false)) {
     Serial.println("[ERR] No se pudo abrir NVS para escritura");
     return;
@@ -500,6 +502,7 @@ void saveSettings() {
   preferences.putBool("inv_enc", state.invertEncoder);
   preferences.putBool("hx_filter", state.useHxFilter);
   preferences.putBool("hx_high_stab", state.hxHighStability);
+  preferences.putFloat("mass_cal", massCalibrationFactor);
   
   preferences.putInt("pin_tof_sda", pinTofSda);
   preferences.putInt("pin_tof_scl", pinTofScl);
@@ -718,10 +721,10 @@ void initSensors() {
     // Solo HX711
     loadCell.begin(pinHxDt, pinHxSck);
     if (loadCell.is_ready()) {
-      loadCell.set_scale(420.0);
+      loadCell.set_scale(massCalibrationFactor);
       loadCell.tare();
       state.loadCellReady = true;
-      Serial.println("[OK] HX711 inicializado");
+      Serial.printf("[OK] HX711 inicializado con escala: %.3f\n", massCalibrationFactor);
     } else {
       Serial.println("[WARN] HX711 no encontrado");
     }
@@ -729,15 +732,17 @@ void initSensors() {
   else if (currentWeightMode == "nau7802") {
     // Solo NAU7802
     if (nauScale.begin(I2C_TOF)) {
+      nauScale.setCalibrationFactor(massCalibrationFactor);
       nauScale.calculateZeroOffset(64);
       state.loadCellReady = true;
       useNAU7802 = true;
-      Serial.println("[OK] NAU7802 en Bus0 inicializado");
+      Serial.printf("[OK] NAU7802 en Bus0 inicializado con escala: %.3f\n", massCalibrationFactor);
     } else if (nauScale.begin(I2C_ENC)) {
+      nauScale.setCalibrationFactor(massCalibrationFactor);
       nauScale.calculateZeroOffset(64);
       state.loadCellReady = true;
       useNAU7802 = true;
-      Serial.println("[OK] NAU7802 en Bus1 inicializado");
+      Serial.printf("[OK] NAU7802 en Bus1 inicializado con escala: %.3f\n", massCalibrationFactor);
     } else {
       Serial.println("[WARN] NAU7802 no encontrado");
     }
@@ -1086,6 +1091,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     doc["config"]["weight_mode"] = currentWeightMode;
     doc["config"]["usb_log"] = usbLogActive;
     doc["config"]["sample_rate"] = sampleRateMs;
+    doc["config"]["mass_cal"] = massCalibrationFactor;
     doc["config"]["invert_encoder"] = state.invertEncoder;
     doc["config"]["hx_filter"] = state.useHxFilter;
     doc["config"]["hx_high_stab"] = state.hxHighStability;
@@ -1274,6 +1280,20 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       currentWeightMode.trim();
       saveSettings();
       Serial.printf("[CMD] Modo de Peso cambiado a: %s\n", currentWeightMode.c_str());
+    }
+    else if (msg.startsWith("SET_MASS_CAL:")) {
+      float newFactor = msg.substring(13).toFloat();
+      if (newFactor != 0.0f) {
+        massCalibrationFactor = newFactor;
+        saveSettings();
+        if (useNAU7802) {
+          nauScale.setCalibrationFactor(massCalibrationFactor);
+        } else {
+          loadCell.set_scale(massCalibrationFactor);
+        }
+        Serial.printf("[CMD] Factor de calibración de masa cambiado a: %.3f\n", massCalibrationFactor);
+        ws.textAll("{\"config\":{\"mass_cal\":" + String(massCalibrationFactor, 3) + "}}");
+      }
     }
     else if (msg.startsWith("SET_RATE:")) {
       int newRate = msg.substring(9).toInt();
@@ -1468,6 +1488,7 @@ void setupAPI() {
     doc["config"]["weight_mode"] = currentWeightMode;
     doc["config"]["usb_log"] = usbLogActive;
     doc["config"]["sample_rate"] = sampleRateMs;
+    doc["config"]["mass_cal"] = massCalibrationFactor;
     doc["config"]["invert_encoder"] = state.invertEncoder;
     doc["config"]["hx_filter"] = state.useHxFilter;
     doc["config"]["hx_high_stab"] = state.hxHighStability;
