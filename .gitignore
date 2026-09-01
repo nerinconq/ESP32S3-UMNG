@@ -36,3 +36,21 @@ pio_upload_error.txt
 upload.log
 uploadfs.log
 Informe_Fisica_UMNG_2.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local Tools & Temporary Files
+Cerrar_Procesos_Antigravity.bat
+Produccion_Flasher/
+chrome_history
+edge_history
+scratch/*
+!scratch/compress_assets.py
+!scratch/convertir.py
+!scratch/extract_ast.py
+!scratch/gzip_assets.py
+!scratch/main_cam_test_freenove.cpp
+!scratch/sync_production.py
+
