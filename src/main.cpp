@@ -64,6 +64,44 @@ DNSServer dnsServer;
 String currentLeaderIp = "";
 String currentTeacherIp = "";
 
+// ─── Identidad de Mesa (Open Day) ───
+// mesaNumber = 0 -> sin asignar: red abierta (comportamiento histórico).
+// mesaNumber 1..99 -> red WPA2 con clave propia y canal repartido 1/6/11.
+int mesaNumber = 0;
+const int AP_MAX_CLIENTS = 8;          // 5 estudiantes + líder/tutor + 2 de margen (reconexiones)
+const int MESA_CHANNELS[3] = {1, 6, 11}; // Únicos canales 2.4 GHz que no se solapan
+String apSsid = "";
+String apPassword = "";
+int apChannel = 1;
+
+// Clave WiFi de la mesa. WPA2 exige mínimo 8 caracteres.
+// Formato único en todo el proyecto (debe coincidir con python/mesa_tools.py)
+String mesaPassword(int n) {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "umngm-%02d", n);
+  return String(buf);
+}
+
+int mesaChannel(int n) {
+  if (n <= 0) return 1;
+  return MESA_CHANNELS[(n - 1) % 3];
+}
+
+// Regla de control único: si hay tutor, SOLO el tutor controla;
+// si no, solo el líder autenticado. Nadie más puede enviar comandos de control.
+bool hasControl(const String& ip) {
+  if (currentTeacherIp != "") return ip == currentTeacherIp;
+  return currentLeaderIp != "" && ip == currentLeaderIp;
+}
+
+void saveMesaNumber(int n) {
+  Preferences p;
+  if (p.begin("physys", false)) {
+    p.putInt("mesa", n);
+    p.end();
+  }
+}
+
 TwoWire I2C_TOF = TwoWire(0);  // Bus 0 para ToF
 TwoWire I2C_ENC = TwoWire(1);  // Bus 1 para Encoder
 
@@ -413,6 +451,8 @@ void loadSettings() {
   state.hxHighStability = preferences.getBool("hx_high_stab", false);
   state.tofRange = preferences.getString("tof_range", "short");
   massCalibrationFactor = preferences.getFloat("mass_cal", 420.0f);
+  mesaNumber = preferences.getInt("mesa", 0);
+  if (mesaNumber < 0 || mesaNumber > 99) mesaNumber = 0;
   
   pinTofSda = preferences.getInt("pin_tof_sda", 4);
   pinTofScl = preferences.getInt("pin_tof_scl", 5);
@@ -1112,15 +1152,37 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     doc["hardware"]["pins"]["hx_dt"] = pinHxDt;
     doc["hardware"]["pins"]["hx_sck"] = pinHxSck;
     doc["hardware"]["pins"]["led_rgb"] = pinLedRgb;
+    doc["mesa"]["numero"] = mesaNumber;
+    doc["mesa"]["ssid"] = apSsid;
+    doc["mesa"]["canal"] = apChannel;
     
     String json;
     serializeJson(doc, json);
     client->text(json);
+
+    // Sincronizar el rol que el SERVIDOR reconoce para esta IP
+    // (si la tarjeta se reinició, el navegador no debe seguir creyéndose líder)
+    String connIp = client->remoteIP().toString();
+    const char* syncRole = (connIp == currentTeacherIp) ? "teacher"
+                         : (connIp == currentLeaderIp)  ? "leader" : "student";
+    client->text(String("{\"auth\":\"") + syncRole + "\",\"status\":\"sync\"}");
     Serial.printf("[WS] Cliente #%u conectado, configuración enviada\n", client->id());
   } else if (type == WS_EVT_DISCONNECT) {
     Serial.printf("[WS] Cliente #%u desconectado\n", client->id());
   } else if (type == WS_EVT_DATA) {
     String msg = String((char*)data).substring(0, len);
+
+    // ── Verificación de control único ──
+    // AUTH/DEAUTH son libres; todo lo demás exige tener el control de la mesa.
+    String senderIp = client->remoteIP().toString();
+    bool isAuthMsg = msg.startsWith("AUTH:") || msg == "DEAUTH";
+    if (!isAuthMsg && !hasControl(senderIp)) {
+      String owner = (currentTeacherIp != "") ? "Docente" : currentLeaderIp;
+      client->text("{\"error\":\"unauthorized\",\"leader_ip\":\"" + owner + "\"}");
+      Serial.printf("[AUTH] Comando '%s' rechazado desde %s (sin control)\n", msg.c_str(), senderIp.c_str());
+      return;
+    }
+
     if (msg == "START") {
       state.measuring = true;
       state.triggerEnabled = false;   // DESACTIVAR modo gatillo en manual
@@ -1414,9 +1476,13 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       String clientIp = client->remoteIP().toString();
       
       if (pin == "1234") { // Leader
-        if (currentLeaderIp == "" || currentLeaderIp == clientIp) {
+        if (currentTeacherIp != "" && currentTeacherIp != clientIp) {
+          // Con tutor presente, nadie más toma el control
+          client->text("{\"auth\":\"student\",\"status\":\"teacher_active\"}");
+        } else if (currentLeaderIp == "" || currentLeaderIp == clientIp) {
           currentLeaderIp = clientIp;
           client->text("{\"auth\":\"leader\",\"status\":\"success\"}");
+          ws.textAll("{\"status\":\"leader_active\",\"ip\":\"" + clientIp + "\"}");
           Serial.printf("[AUTH] Líder asignado a IP: %s\n", clientIp.c_str());
         } else {
           client->text("{\"auth\":\"student\",\"status\":\"busy\",\"ip\":\"" + currentLeaderIp + "\"}");
@@ -1424,6 +1490,12 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       } else if (pin == "Umng-2026") { // Teacher
         currentTeacherIp = clientIp;
         client->text("{\"auth\":\"teacher\",\"status\":\"success\"}");
+        // El tutor tiene prioridad: el líder (si lo hay) pasa a espectador
+        if (currentLeaderIp != "") {
+          bool sameDevice = (currentLeaderIp == clientIp);
+          currentLeaderIp = "";
+          if (!sameDevice) ws.textAll("{\"status\":\"leader_deauthorized\"}");
+        }
         Serial.printf("[AUTH] Docente activo en IP: %s\n", clientIp.c_str());
       } else {
         client->text("{\"auth\":\"student\",\"status\":\"fail\"}");
@@ -1431,10 +1503,30 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     }
     else if (msg == "DEAUTH") {
       String clientIp = client->remoteIP().toString();
-      if (currentLeaderIp == clientIp) currentLeaderIp = "";
+      bool wasLeader = (currentLeaderIp == clientIp);
+      if (wasLeader) currentLeaderIp = "";
       if (currentTeacherIp == clientIp) currentTeacherIp = "";
       client->text("{\"auth\":\"student\",\"status\":\"success\"}");
+      if (wasLeader) ws.textAll("{\"status\":\"leader_deauthorized\"}");
       Serial.printf("[AUTH] Usuario desconectado: %s\n", clientIp.c_str());
+    }
+    else if (msg == "RELEASE_LEADER") {
+      // SOLO DOCENTE: liberar el liderato de la mesa (cambio de líder sin reiniciar)
+      if (senderIp != currentTeacherIp) return;
+      currentLeaderIp = "";
+      ws.textAll("{\"status\":\"leader_deauthorized\"}");
+      Serial.println("[AUTH] Liderato liberado por el Docente");
+    }
+    else if (msg.startsWith("SET_MESA:")) {
+      // SOLO DOCENTE: reasignar número de mesa (cambia clave WiFi y canal; reinicia)
+      if (senderIp != currentTeacherIp) return;
+      int n = msg.substring(9).toInt();
+      if (n < 0 || n > 99) return;
+      saveMesaNumber(n);
+      client->text("{\"status\":\"mesa_updated\",\"mesa\":" + String(n) + "}");
+      Serial.printf("[MESA] Mesa reasignada a %d por el Docente. Reiniciando...\n", n);
+      delay(800);
+      ESP.restart();
     }
   }
 }
@@ -1496,6 +1588,11 @@ void setupAPI() {
     doc["config"]["tof_range"] = state.tofRange;
     doc["auth"]["leader_ip"] = currentLeaderIp;
     doc["auth"]["teacher_ip"] = currentTeacherIp;
+    doc["auth"]["leader_active"] = (currentLeaderIp != "");
+    doc["auth"]["teacher_active"] = (currentTeacherIp != "");
+    doc["mesa"]["numero"] = mesaNumber;
+    doc["mesa"]["ssid"] = apSsid;
+    doc["mesa"]["canal"] = apChannel;
     
     bool isCamProfile = (pinTofSda == 1 && pinTofScl == 47);
     doc["hardware"]["camera_detected"] = isCamProfile;
@@ -1692,6 +1789,10 @@ void setupAPI() {
   });
 
   server.on("/api/data/clear", HTTP_DELETE, [](AsyncWebServerRequest *req) {
+    if (!hasControl(req->client()->remoteIP().toString())) {
+      req->send(403, "application/json", "{\"error\":\"unauthorized\"}");
+      return;
+    }
     int count = 0;
     File root = DataFS.open("/");
     File file = root.openNextFile();
@@ -1788,6 +1889,46 @@ void setupAPI() {
 // ═══════════════════════════════════════════════════════════════
 unsigned long resetPressStart = 0;
 
+// ═══════════════════════════════════════════════════════════════
+// COMANDOS POR PUERTO SERIE (usados por grabar.py / kit USB)
+//   PHYSYS_INFO   -> responde con mesa, SSID, clave, canal y versión
+//   SET_MESA:<n>  -> guarda la mesa (0..99) en NVS y reinicia
+// Se escucha en USB nativo (Serial) y en UART0 (Serial0: tarjetas con CH340/CP210x)
+// ═══════════════════════════════════════════════════════════════
+void processSerialLine(Stream& port, String line) {
+  line.trim();
+  if (line == "PHYSYS_INFO") {
+    port.printf("PHYSYS_INFO mesa=%d ssid=%s pass=%s canal=%d max=%d\n",
+                mesaNumber, apSsid.c_str(), apPassword.c_str(), apChannel, AP_MAX_CLIENTS);
+  } else if (line.startsWith("SET_MESA:")) {
+    int n = line.substring(9).toInt();
+    if (n < 0 || n > 99) {
+      port.println("PHYSYS_MESA_ERROR rango 0-99");
+      return;
+    }
+    saveMesaNumber(n);
+    port.printf("PHYSYS_MESA_OK %d\n", n);
+    port.flush();
+    delay(500);
+    ESP.restart();
+  }
+}
+
+void handleSerialCommands() {
+  static String bufUsb = "";
+  static String bufUart = "";
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') { if (bufUsb.length()) processSerialLine(Serial, bufUsb); bufUsb = ""; }
+    else if (bufUsb.length() < 64) bufUsb += c;
+  }
+  while (Serial0.available()) {
+    char c = (char)Serial0.read();
+    if (c == '\n' || c == '\r') { if (bufUart.length()) processSerialLine(Serial0, bufUart); bufUart = ""; }
+    else if (bufUart.length() < 64) bufUart += c;
+  }
+}
+
 void checkFactoryReset() {
   if (digitalRead(FACTORY_RESET_PIN) == LOW) {
     if (resetPressStart == 0) {
@@ -1876,6 +2017,7 @@ void runUsbExportMode() {
 
 void setup() {
   Serial.begin(115200);
+  Serial0.begin(115200); // UART0: comandos de mesa en tarjetas con CH340/CP210x
   
   // Cargar configuraciones del NVS al inicio para conocer los pines antes de inicializar hardware
   loadSettings();
@@ -1937,11 +2079,26 @@ void setup() {
   String macSuffix = WiFi.softAPmacAddress().substring(12);
   macSuffix.replace(":", "");
   String apName = "Physys-Lab-" + macSuffix;
+  apSsid = apName;
+  apChannel = mesaChannel(mesaNumber);
   
-  WiFi.softAP(apName.c_str());
+  bool apOk = false;
+  if (mesaNumber > 0) {
+    apPassword = mesaPassword(mesaNumber);
+    apOk = WiFi.softAP(apName.c_str(), apPassword.c_str(), apChannel, 0, AP_MAX_CLIENTS);
+  }
+  if (!apOk) {
+    // Mesa sin asignar (o fallo): red abierta, comportamiento histórico
+    apPassword = "";
+    WiFi.softAP(apName.c_str(), NULL, apChannel, 0, AP_MAX_CLIENTS);
+  }
+  // Potencia fija al máximo: cobertura garantizada en salones de 4x4 m a 100 m².
+  // La interferencia entre mesas se resuelve con canales 1/6/11, no bajando potencia.
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   delay(100);
-  Serial.printf("[WiFi] AP '%s' activo en %s\n",
-                apName.c_str(), WiFi.softAPIP().toString().c_str());
+  Serial.printf("[WiFi] AP '%s' activo en %s | Mesa %d | Canal %d | %s | Max %d clientes\n",
+                apName.c_str(), WiFi.softAPIP().toString().c_str(), mesaNumber, apChannel,
+                apPassword.length() ? "WPA2" : "ABIERTA", AP_MAX_CLIENTS);
 
   // mDNS para facilitar acceso local
   if (MDNS.begin("physyslab")) {
@@ -2026,6 +2183,7 @@ void loop() {
   }
   
   checkFactoryReset();
+  handleSerialCommands();
   usbConnected = usbHost.isConnected();
 
   readSensors();

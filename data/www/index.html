@@ -22,6 +22,8 @@
                 <div id="role-badge" class="role-badge role-student" onclick="openAuthModal()" title="Haz click para cambiar rol">
                     <span class="role-icon">🔒</span> <span class="role-text" id="role-text">Estudiante (Solo Lectura)</span>
                 </div>
+                <span id="mesa-badge" class="role-badge role-leader" style="display:none; cursor:default;">🪑 Mesa --</span>
+                <button id="btn-release-leader" class="role-badge role-teacher" style="display:none; border:none; cursor:pointer;" onclick="releaseLeader()" title="Liberar el liderato de esta mesa">🔓 Liberar líder</button>
             </div>
             <div class="header-right">
                 <span id="battery-badge" class="battery-badge" title="Batería">🔋 --</span>
@@ -431,6 +433,14 @@
 
                 <!-- CONFIGURACIÓN DE PINES (SOLO VISIBLE SI ES DOCENTE) -->
                 <div id="gv-teacher-settings" class="gv-teacher-settings glass-card" style="display:none; margin-top:20px; padding: 15px; border: 1px solid rgba(255,255,255,0.08);">
+                    <h3 style="margin:0 0 5px 0; color:#38bdf8; display:flex; align-items:center; gap:8px;">🪑 Número de Mesa (Rol Docente)</h3>
+                    <p class="config-desc" style="margin-bottom:10px; font-size:0.8rem; color:#94a3b8;">
+                        Define la clave WiFi (umngm-NN) y el canal (1/6/11) de esta tarjeta. 0 = red abierta sin mesa. Reinicia la tarjeta.
+                    </p>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:20px;">
+                        <input type="number" id="mesa-number-input" min="0" max="99" class="select-premium" style="width:90px; border:1px solid #334155;" value="0">
+                        <button class="btn-action" onclick="assignMesaNumber()">Asignar mesa</button>
+                    </div>
                     <h3 style="margin:0 0 5px 0; color:#38bdf8; display:flex; align-items:center; gap:8px;">⚙️ Reasignación Avanzada de Pines (Rol Docente)</h3>
                     <p class="config-desc" style="margin-bottom:15px; font-size:0.8rem; color:#94a3b8;">
                         Modifica los pines físicos asignados a cada sensor. Los cambios se guardarán automáticamente en la NVS y reiniciarán el microcontrolador.

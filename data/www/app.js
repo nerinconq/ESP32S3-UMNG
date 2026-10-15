@@ -159,7 +159,17 @@ function connectWS() {
             
             // --- NUEVOS CONTROLADORES DE ROL Y HARDWARE ---
             if (data.auth) {
-                if (data.auth === "leader" && data.status === "success") {
+                if (data.status === "sync") {
+                    // Rol real reconocido por la tarjeta (p. ej. tras un reinicio del ESP32)
+                    if (currentUserRole !== data.auth) {
+                        if (currentUserRole !== "student" && data.auth === "student") {
+                            showNotification("🔒 Tu sesión de control se cerró (la tarjeta se reinició o fue liberada). Ingresa el PIN de nuevo.", "#f0b429");
+                        }
+                        currentUserRole = data.auth;
+                        sessionStorage.setItem('user_role', data.auth);
+                        syncRoleUI();
+                    }
+                } else if (data.auth === "leader" && data.status === "success") {
                     currentUserRole = "leader";
                     sessionStorage.setItem('user_role', 'leader');
                     showNotification("⭐ Autenticado como Líder de Mesa", "#eab308");
@@ -171,6 +181,8 @@ function connectWS() {
                     showNotification("🎓 Autenticado como Docente (Admin)", "#38bdf8");
                     closeAuthModal();
                     syncRoleUI();
+                } else if (data.auth === "student" && data.status === "teacher_active") {
+                    showNotification("🎓 Hay un Docente a cargo de esta mesa. Solo él puede controlar la medición.", "#38bdf8");
                 } else if (data.auth === "student" && data.status === "busy") {
                     showNotification("⚠️ ¡La mesa ya tiene un líder activo desde IP: " + data.ip + "!", "#ff4d6a");
                 } else if (data.auth === "student" && data.status === "fail") {
@@ -223,8 +235,22 @@ function connectWS() {
                 populatePinSelectors();
             }
             
+            if (data.mesa) updateMesaBadge(data.mesa);
+
+            if (data.status === "mesa_updated") {
+                showNotification("🪑 Mesa reasignada a " + data.mesa + ". La tarjeta se reinicia: reconéctate con el QR de la nueva mesa.", "#38bdf8");
+                return;
+            }
+            
             if (data.error === "unauthorized") {
-                showNotification("⚠️ Acción rechazada: La mesa está controlada por el Líder activo en IP " + data.leader_ip, "#ff4d6a");
+                const owner = data.leader_ip;
+                if (owner === "Docente") {
+                    showNotification("🎓 Acción rechazada: un Docente está a cargo de esta mesa.", "#ff4d6a");
+                } else if (owner) {
+                    showNotification("⚠️ Acción rechazada: la mesa está controlada por el Líder activo en IP " + owner, "#ff4d6a");
+                } else {
+                    showNotification("🔒 Acción rechazada: inicia sesión como Líder (PIN) o Docente para controlar la mesa.", "#ff4d6a");
+                }
                 return;
             }
             
@@ -1211,6 +1237,7 @@ function fetchSystemInfo() {
                 leaderIp = data.auth.leader_ip || "";
                 updateLeaderStatusBanner();
             }
+            if (data.mesa) updateMesaBadge(data.mesa);
         })
         .catch(() => {});
 
@@ -2968,6 +2995,8 @@ function syncRoleUI() {
     if (teacherSettings) {
         teacherSettings.style.display = canEditPins ? 'block' : 'none';
     }
+    const releaseBtn = $('btn-release-leader');
+    if (releaseBtn) releaseBtn.style.display = canEditPins ? '' : 'none';
 
     // Update status bar text beautifully
     updateLeaderStatusBanner();
@@ -3282,6 +3311,38 @@ function updateHardwareStatusBanner() {
         banner.innerHTML = `<strong>ℹ️ Placa Base Estándar Activa (Sin Cámara Detectada)</strong><br>
         Todos los pines del microcontrolador están libres para uso general. Los sensores están asignados al estándar: <strong>ToF: 4/5, Encoder: 10/11, HX711: 6/7</strong>.`;
     }
+}
+
+// ─── Mesa (Open Day) ───
+function updateMesaBadge(mesa) {
+    const badge = $('mesa-badge');
+    if (!badge || !mesa) return;
+    if (mesa.numero > 0) {
+        badge.textContent = '🪑 Mesa ' + String(mesa.numero).padStart(2, '0');
+        badge.title = 'Red: ' + (mesa.ssid || '') + ' · Canal ' + (mesa.canal || '');
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
+    }
+    const input = $('mesa-number-input');
+    if (input && document.activeElement !== input) input.value = mesa.numero || 0;
+}
+
+function releaseLeader() {
+    if (currentUserRole !== 'teacher') return;
+    if (!confirm('¿Liberar el liderato de esta mesa? El líder actual pasará a espectador y otro podrá ingresar con el PIN.')) return;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send('RELEASE_LEADER');
+}
+
+function assignMesaNumber() {
+    if (currentUserRole !== 'teacher') return;
+    const n = parseInt($('mesa-number-input').value, 10);
+    if (isNaN(n) || n < 0 || n > 99) {
+        showNotification('⚠️ Número de mesa inválido (0 a 99).', '#ff4d6a');
+        return;
+    }
+    if (!confirm('¿Asignar esta tarjeta a la Mesa ' + n + '?\n\nCambiarán la clave WiFi y el canal, y la tarjeta se reiniciará. Todos deberán reconectarse con el QR de la mesa.')) return;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send('SET_MESA:' + n);
 }
 
 function updateLeaderStatusBanner() {

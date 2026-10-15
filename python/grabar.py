@@ -96,7 +96,7 @@ def analyze_device(port):
     print(f"   * PRESELECCIÓN RECOMENDADA: {sug_name}")
     print("======================================================")
     
-    return sug_env
+    return sug_env, mac
 
 def sync_versions_and_cache_buster():
     print("\n[INFO] Sincronizando versiones y aplicando cache buster...")
@@ -181,11 +181,21 @@ def main():
                     break
             
     print(f"--> Puerto seleccionado: {port} ({conn_type_sel})")
+
+    # 1.5 Modo de trabajo
+    print("\n[MODO] ¿Qué deseas hacer?")
+    print("  1) Grabar firmware + web (y luego asignar mesa)")
+    print("  2) Solo asignar / cambiar número de mesa y generar su QR (sin grabar)")
+    modo = input("➔ Elige 1 o 2 [1]: ").strip()
+    if modo == "2":
+        paso_mesa(port)
+        return
     
     # 2. Ejecutar diagnóstico de hardware
     recommended_env = "esp32s3base"
+    mac = ""
     try:
-        recommended_env = analyze_device(port)
+        recommended_env, mac = analyze_device(port)
     except Exception as e:
         print(f"[AVISO] No se pudo realizar el diagnóstico detallado: {e}")
         
@@ -263,8 +273,57 @@ def main():
         print("\n==========================================================")
         print(" 🎉 ¡PROCESO DE GRABACIÓN FINALIZADO CON ÉXITO! 🎉")
         print("==========================================================")
+        print("\n[INFO] Esperando a que la tarjeta reinicie...")
+        time.sleep(4)
+        paso_mesa(port, tipo=profile_name, mac=mac)
     else:
         print("\n[ERROR] Falló la subida del firmware.")
+
+def paso_mesa(port, tipo="", mac=""):
+    """Asigna el número de mesa por puerto serie (NO borra calibraciones) y genera el QR del póster."""
+    try:
+        import mesa_tools
+    except Exception as e:
+        print(f"[ERROR] No se pudo cargar mesa_tools: {e}")
+        return
+
+    actual = None
+    try:
+        info = mesa_tools.query_info(port, wait_s=15)
+        actual = info["mesa"]
+        print(f"\n[MESA] Estado actual: mesa {actual} | red {info['ssid']} | canal {info['canal']}")
+    except Exception as e:
+        print(f"\n[AVISO] No se pudo leer la tarjeta por serie ({e}).")
+
+    resp = input("➔ Número de mesa a asignar (1-99, 0 = red abierta sin mesa, Enter = no cambiar): ").strip()
+    if resp == "":
+        if actual:
+            regen = input("   ¿Regenerar el QR de la mesa actual? (s/N): ").strip().lower()
+            if regen == "s":
+                try:
+                    path = mesa_tools.make_qr_card(info["mesa"], info["ssid"], info.get("pass", ""), info["canal"])
+                    print(f"[OK] QR generado: {path}")
+                except Exception as e:
+                    print(f"[ERROR] No se pudo generar el QR: {e} (instala con: pip install qrcode[pil])")
+        return
+    if not resp.isdigit() or not (0 <= int(resp) <= 99):
+        print("[ERROR] Número inválido. Puedes repetirlo luego con la opción 2 del menú.")
+        return
+
+    try:
+        info, path = mesa_tools.asignar_y_generar(port, int(resp), tipo=tipo, mac=mac)
+        print("\n==========================================================")
+        print(f"  🪑 MESA {info['mesa']:02d} ASIGNADA")
+        print(f"   * Red WiFi: {info['ssid']}")
+        print(f"   * Clave:    {info.get('pass') or '(abierta)'}")
+        print(f"   * Canal:    {info['canal']}  |  Máx. celulares: {info.get('max', '8')}")
+        print(f"   * QR:       {path}")
+        print("==========================================================")
+    except ImportError:
+        print("[ERROR] Falta la librería de QR. Ejecuta: pip install qrcode[pil]")
+    except Exception as e:
+        print(f"[ERROR] No se pudo asignar la mesa: {e}")
+        print("        Sugerencia: desconecta y reconecta la tarjeta y usa la opción 2 del menú.")
 
 if __name__ == "__main__":
     try:
