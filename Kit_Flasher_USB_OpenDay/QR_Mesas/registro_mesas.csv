@@ -1,0 +1,5 @@
+fecha,mesa,ssid,clave,canal,tipo_tarjeta,mac_base,puerto
+2026-10-14 06:51,1,Physys-Lab-26F8,umngm-01,1,Base / Clon,14:c1:9f:2b:26:f8,COM13
+2026-10-14 07:22,2,Physys-Lab-D6FC,umngm-02,6,Base / Clon,c0:4e:30:0b:d6:fc,COM5
+2026-10-14 08:03,3,Physys-Lab-D7F0,umngm-03,11,Base / Clon,c0:4e:30:0b:d7:f0,COM3
+2026-10-14 08:17,4,Physys-Lab-96A8,umngm-04,1,Base / Clon,14:c1:9f:2b:96:a8,com6
