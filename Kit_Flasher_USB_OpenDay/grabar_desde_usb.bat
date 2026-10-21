@@ -20,17 +20,17 @@ if not exist "tools\esptool.exe" (
 
 echo [1] Escaneando puertos COM conectados...
 set DEFAULT_PORT=
-for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "[System.IO.Ports.SerialPort]::GetPortNames() ^| Select-Object -Unique"`) do (
-    echo   * Detectado: %%p
-    if not defined DEFAULT_PORT set DEFAULT_PORT=%%p
+for /f "usebackq tokens=1* delims=|" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "tools\get_ports.ps1"`) do (
+    echo   * Detectado: %%a  ^(%%b^)
+    if not defined DEFAULT_PORT set DEFAULT_PORT=%%a
 )
 
 if defined DEFAULT_PORT (
-    set /p PORT="? Ingresa el puerto COM a usar [Sugerido: !DEFAULT_PORT!]: "
+    set /p PORT="-> Ingresa el puerto COM a usar [Default: !DEFAULT_PORT!]: "
     if "!PORT!"=="" set PORT=!DEFAULT_PORT!
 ) else (
     echo   [AVISO] No se detecto ningun puerto COM conectado.
-    set /p PORT="? Ingresa manualmente el puerto COM (ejemplo: COM6): "
+    set /p PORT="-> Ingresa manualmente el puerto COM (ejemplo: COM6): "
 )
 
 if "%PORT%"=="" (
@@ -46,7 +46,7 @@ echo [2] Selecciona el perfil de hardware:
 echo   1^) Base / Clon  (ESP32-S3 estandar, PSRAM QSPI o sin PSRAM)
 echo   2^) Tarjeta CAM  (ESP32-S3 con modulo de camara, PSRAM Octal OPI)
 echo ======================================================================
-set /p TIPO="? Elige una opcion (1 o 2) [Default: 1]: "
+set /p TIPO="-> Elige una opcion (1 o 2) [Default: 1]: "
 if "%TIPO%"=="2" (
     set CARPETA=cam
     set PERFIL=Tarjeta CAM (Octal OPI)
@@ -63,7 +63,7 @@ echo   1^) Grabacion Completa (Firmware + Web LittleFS - Conserva NVS)
 echo   2^) Modo Rescate (Borrado Completo de Flash previo + Grabacion)
 echo   3^) Solo Asignar / Cambiar Mesa por Serie (Sin regrabar firmware)
 echo ======================================================================
-set /p MODO="? Elige una opcion (1, 2 o 3) [Default: 1]: "
+set /p MODO="-> Elige una opcion (1, 2 o 3) [Default: 1]: "
 if "%MODO%"=="" set MODO=1
 
 if "%MODO%"=="3" goto ASIGNAR_MESA_ONLY
@@ -90,7 +90,7 @@ if errorlevel 1 goto ERROR_FLASH
 
 echo.
 echo ======================================================================
-echo  ?? ?GRABACION COMPLETADA CON EXITO! ??
+echo   GRABACION COMPLETADA CON EXITO
 echo ======================================================================
 echo.
 echo Esperando a que el ESP32-S3 reinicie en modo normal (4 segundos)...
@@ -101,7 +101,7 @@ echo.
 echo ======================================================================
 echo [4] ASIGNACION DE IDENTIDAD DE MESA (WPA2 + Canal no interferente)
 echo ======================================================================
-set /p NMESA="? Ingresa el numero de mesa para esta tarjeta (1-99, 0 = abierta, Enter = omitir): "
+set /p NMESA="-> Ingresa el numero de mesa para esta tarjeta (1-99, 0 = abierta, Enter = omitir): "
 
 if "%NMESA%"=="" (
     echo [INFO] Identidad de mesa conservada sin cambios.
